@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Код разложений — Matrix Lab</title>
+<style>
+  :root {
+    --bg: #080c14;
+    --panel: rgba(255,255,255,0.05);
+    --panel2: rgba(255,255,255,0.08);
+    --border: rgba(255,255,255,0.1);
+    --text: #dde4f0;
+    --muted: rgba(200,210,230,0.65);
+    --accent: #5b9cf6;
+    --accent2: #a78bfa;
+    --good: #4ade80;
+    --radius: 14px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.45);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    padding: 2rem;
+  }
+  .container { max-width: 1400px; margin: 0 auto; }
+
+  h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.3rem; }
+  h1 small { font-size: 0.9rem; font-weight: 400; color: var(--muted); }
+  .subtitle { color: var(--muted); margin-bottom: 2rem; }
+
+  .algo-block {
+    background: linear-gradient(135deg, var(--panel2), var(--panel));
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .algo-header {
+    display: flex; align-items: baseline; gap: 0.8rem;
+    margin-bottom: 1rem; flex-wrap: wrap;
+  }
+  .algo-header h2 { font-size: 1.15rem; font-weight: 700; color: var(--accent); }
+  .algo-header .badge {
+    font-size: 0.7rem; font-weight: 600;
+    background: rgba(91,156,246,0.2); color: var(--accent2);
+    padding: 0.15rem 0.55rem; border-radius: 999px;
+  }
+  .desc { font-size: 0.88rem; margin-bottom: 1rem; color: var(--text); }
+  .desc strong { color: var(--accent2); }
+  .example {
+    background: rgba(0,0,0,0.25); border-left: 3px solid var(--good);
+    padding: 0.6rem 0.9rem; border-radius: 6px;
+    font-size: 0.84rem; margin-bottom: 1.2rem; color: var(--muted);
+  }
+
+  .code-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
+  }
+  @media (max-width: 900px) {
+    .code-grid { grid-template-columns: 1fr; }
+  }
+
+  .code-col { min-width: 0; }
+  .code-col-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 0.5rem;
+  }
+  .code-col .lang-label {
+    display: inline-block;
+    font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.04em; padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+  }
+  .lang-js .lang-label { background: rgba(247,223,30,0.15); color: #f7df1e; }
+  .lang-py .lang-label { background: rgba(69,133,214,0.15); color: #4585d6; }
+  .copy-btn {
+    font-size: 0.68rem; font-weight: 600;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: 0.22s ease;
+    font-family: inherit;
+    line-height: 1.4;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,0.12); color: var(--text); }
+  .copy-btn.copied { background: rgba(74,222,128,0.15); border-color: var(--good); color: var(--good); }
+
+  pre {
+    background: rgba(0,0,0,0.35);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.8rem 0.5rem;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.78rem;
+    line-height: 1.55;
+    tab-size: 2;
+  }
+  pre .kw { color: #c792ea; }
+  pre .fn { color: #82aaff; }
+  pre .cm { color: #546e7a; font-style: italic; }
+  pre .str { color: #c3e88d; }
+  pre .num { color: #f78c6c; }
+  pre .op { color: #89ddff; }
+  pre .type { color: #ffcb6b; }
+  pre .const { color: #f07178; }
+
+  .back-link {
+    display: inline-block; margin-top: 2rem; margin-bottom: 1.5rem;
+    color: var(--accent); text-decoration: none; font-size: 0.88rem;
+  }
+  .back-link:hover { text-decoration: underline; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+
+  .note {
+    background: rgba(167,139,250,0.1); border: 1px solid rgba(167,139,250,0.2);
+    padding: 0.6rem 1rem; border-radius: 8px; font-size: 0.82rem; margin-bottom: 1rem;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Код матричных разложений <small>JavaScript & Python</small></h1>
+<p class="subtitle">Каждая строка с комментарием, описание алгоритма и пример из жизни</p>
+<a class="back-link" href="/">← На главную (Matrix Lab)</a>
+
+<hr>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     1. SVD
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div class="algo-block" id="svd">
+  <div class="algo-header">
+    <h2>1. SVD — сингулярное разложение</h2>
+    <span class="badge">усечение ранга k</span>
+  </div>
+  <div class="desc">
+    <strong>Что делает:</strong> раскладывает матрицу <code>A</code> на три сомножителя:
+    <code>A = U · Σ · Vᵀ</code>. Усечение до ранга k оставляет только k наибольших
+    сингулярных чисел — это даёт наилучшее приближение исходной матрицы.
+    <strong>Где используется:</strong> сжатие изображений, шумоподавление, рекомендательные системы.
+  </div>
+  <div class="example">
+    🧩 <strong>Пример из жизни:</strong> Представьте фотографию 1000×1000 пикселей.
+    SVD с k=100 может сжать её в 10 раз, сохранив визуальное качество — вместо хранения
+    всех 1 000 000 значений храним только 100 · (1000 + 1000) = 200 000.
+  </div>
+  <div class="code-grid">
+    <!-- JS -->
+    <div class="code-col lang-js">
+      <div class="code-col-head">
+        <div class="lang-label">JavaScript</div>
+        <button class="copy-btn">Копировать</button>
+      </div>
+      <pre><span class="cm">// Усечённое SVD через numeric.js</span>
+<span class="kw">export</span> <span class="kw">function</span> <span class="fn">svdTruncated</span>(A, k) {
+  <span class="cm">// Вызываем полное SVD из библиотеки numeric</span>
+  <span class="kw">const</span> { U, S, V } = <span class="fn">numeric</span>.<span class="fn">svd</span>(A);
+  <span class="kw">const</span> { m, n } = <span class="fn">dims</span>(A);
+  <span class="cm">// Реальный ранг — минимум из запрошенного k и доступных размеров</span>
+  <span class="kw">const</span> r = <span class="type">Math</span>.<span class="fn">max</span>(<span class="num">1</span>, <span class="type">Math</span>.<span class="fn">min</span>(k, S.<span class="kw">length</span>,
+    U[<span class="num">0</span>].<span class="kw">length</span>, V.<span class="kw">length</span>, m, n));
+  <span class="cm">// Берём первые r столбцов U (левые сингулярные векторы)</span>
+  <span class="kw">const</span> Uk = <span class="fn">takeUk</span>(U, r);
+  <span class="cm">// Берём первые r сингулярных чисел</span>
+  <span class="kw">const</span> Sk = S.<span class="fn">slice</span>(<span class="num">0</span>, r);
+  <span class="cm">// Берём первые r строк V (правые сингулярные векторы)</span>
+  <span class="kw">const</span> Vk = <span class="fn">takeVk</span>(V, r);
+  <span class="cm">// U·Σ — взвешенные левые векторы</span>
+  <span class="kw">const</span> US = <span class="fn">dot</span>(Uk, <span class="fn">diag</span>(Sk));
+  <span class="cm">// (U·Σ)·Vᵀ = Ã — приближение ранга r</span>
+  <span class="kw">const</span> Ahat = <span class="fn">dot</span>(US, <span class="fn">transpose</span>(Vk));
+  <span class="kw">return</span> { Ahat, U, S, V, r, Uk, Sk, Vk, US };
+}</pre>
+    </div>
+    <!-- Python -->
+    <div class="code-col lang-py">
+      <div class="code-col-head">
+        <div class="lang-label">Python</div>
+        <button class="copy-btn">Копировать</button>
+      </div>
+      <pre><span class="cm"># Усечённое SVD через numpy.linalg.svd</span>
+<span class="kw">import</span> numpy <span class="kw">as</span> np
+
+<span class="kw">def</span> <span class="fn">svd_truncated</span>(A, k):
+    <span class="cm"># Полное SVD: A = U·S·V†</span>
+    <span class="cm"># full_matrices=False — экономный формат</span>
+    U, S, Vt = np.<span class="fn">linalg</span>.<span class="fn">svd</span>(A, <span class="kw">full_matrices</span>=<span class="const">False</span>)
+    <span class="cm"># Реальный ранг — минимум из k и размера S</span>
+    r = <span class="fn">max</span>(<span class="num">1</span>, <span class="fn">min</span>(k, <span class="fn">len</span>(S)))
+    <span class="cm"># Берём первые r столбцов U и строк V†</span>
+    Uk = U[:, :r]
+    Sk = S[:r]
+    Vkt = Vt[:r, :]
+    <span class="cm"># Σ как диагональная матрица r×r</span>
+    Sigma = np.<span class="fn">diag</span>(Sk)
+    <span class="cm"># U·Σ</span>
+    US = Uk @ Sigma
+    <span class="cm"># (U·Σ)·V† = Ã</span>
+    Ahat = US @ Vkt
+    <span class="kw">return</span> {<span class="str">'Ahat'</span>: Ahat, <span class="str">'r'</span>: r,
+            <span class="str">'Uk'</span>: Uk, <span class="str">'Sk'</span>: Sk, <span class="str">'Vkt'</span>: Vkt}</pre>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     2. PCA
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div class="algo-block" id="pca">
+  <div class="algo-header">
+    <h2>2. PCA — метод главных компонент</h2>
+    <span class="badge">центрирование + SVD</span>
+  </div>
+  <div class="desc">
+    <strong>Что делает:</strong> центрирует данные (вычитает среднее по каждому столбцу),
+    затем применяет SVD к центрированной матрице. Первые k главных компонент
+    описывают наибольшую дисперсию данных.
+    <strong>Где используется:</strong> уменьшение размерности, визуализация,
+    сжатие признаков в ML.
+  </div>
+  <div class="example">
+    🧩 <strong>Пример из жизни:</strong> У вас 50 характеристик товара (цена, вес, размер…).
+    PCA может выделить 3 главные компоненты, которые объясняют 90% вариации —
+    вы сокращаете данные в 16 раз, сохраняя основную структуру.
+  </div>
+  <div class="code-grid">
+    <!-- JS -->
+    <div class="code-col lang-js">
+      <div class="code-col-head">
+        <div class="lang-label">JavaScript</div>
+        <button class="copy-btn">Копировать</button>
+      </div>
+      <pre><span class="cm">// PCA через центрирование + SVD</span>
+<span class="kw">export</span> <span class="kw">function</span> <span class="fn">pcaReconstructWithSteps</span>(A, k) {
+  <span class="kw">const</span> { m, n } = <span class="fn">dims</span>(A);
+  <span class="cm">// Шаг 1: считаем среднее каждого столбца</span>
+  <span class="kw">const</span> mean = <span class="kw">new</span> <span class="type">Array</span>(n).<span class="fn">fill</span>(<span class="num">0</span>);
+  <span class="kw">for</span> (<span class="kw">let</span> j = <span class="num">0</span>; j &lt; n; j++) {
+    <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; m; i++) mean[j] += A[i][j];
+    mean[j] /= m;
+  }
+  <span class="cm">// Шаг 2: центрируем — вычитаем среднее</span>
+  <span class="kw">const</span> X = <span class="fn">zeros</span>(m, n);
+  <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; m; i++)
+    <span class="kw">for</span> (<span class="kw">let</span> j = <span class="num">0</span>; j &lt; n; j++) X[i][j] = A[i][j] - mean[j];
+  <span class="cm">// Шаг 3: SVD центрированной матрицы (усечённое)</span>
+  <span class="kw">const</span> svdX = <span class="fn">svdTruncated</span>(X, k);
+  <span class="kw">const</span> { Ahat: Xk } = svdX;
+  <span class="cm">// Шаг 4: прибавляем среднее обратно — получаем Ã</span>
+  <span class="kw">const</span> Ahat = <span class="fn">zeros</span>(m, n);
+  <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; m; i++)
+    <span class="kw">for</span> (<span class="kw">let</span> j = <span class="num">0</span>; j &lt; n; j++) Ahat[i][j] = Xk[i][j] + mean[j];
+  <span class="kw">return</span> { Ahat, mean, X, ...svdX };
+}</pre>
+    </div>
+    <!-- Python -->
+    <div class="code-col lang-py">
+      <div class="code-col-head">
+        <div class="lang-label">Python</div>
+        <button class="copy-btn">Копировать</button>
+      </div>
+      <pre><span class="cm"># PCA: центрирование + SVD (или sklearn)</span>
+<span class="kw">import</span> numpy <span class="kw">as</span> np
+<span class="kw">from</span> sklearn.decomposition <span class="kw">import</span> PCA
+
+<span class="kw">def</span> <span class="fn">pca_reconstruct</span>(A, k):
+    <span class="cm"># Шаг 1: среднее по столбцам</span>
+    mean = A.<span class="fn">mean</span>(axis=<span class="num">0</span>)
+    <span class="cm"># Шаг 2: центрируем</span>
+    X = A - mean
+    <span class="cm"># Шаг 3: SVD центрированной матрицы</span>
+    U, S, Vt = np.<span class="fn">linalg</span>.<span class="fn">svd</span>(X, <span class="kw">full_matrices</span>=<span class="const">False</span>)
+    r = <span class="fn">min</span>(k, <span class="fn">len</span>(S))
+    <span class="cm"># Усечённое приближение X̂ = U·Σ·V†</span>
+    Xk = U[:, :r] @ np.<span class="fn">diag</span>(S[:r]) @ Vt[:r, :]
+    <span class="cm"># Шаг 4: прибавляем среднее обратно</span>
+    Ahat = Xk + mean
+    <span class="kw">return</span> Ahat
+
+<span class="cm"># Или через sklearn (одна строка):</span>
+<span class="kw">def</span> <span class="fn">pca_sklearn</span>(A, k):
+    pca = PCA(<span class="kw">n_components</span>=k)
+    Z = pca.<span class="fn">fit_transform</span>(A)        <span class="cm"># проекция на k компонент</span>
+    Ahat = pca.<span class="fn">inverse_transform</span>(Z)   <span class="cm"># восстановление</span>
+    <span class="kw">return</span> Ahat</pre>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     3. NMF
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div class="algo-block" id="nmf">
+  <div class="algo-header">
+    <h2>3. NMF — неотрицательное матричное разложение</h2>
+    <span class="badge">мультипликативное обновление</span>
+  </div>
+  <div class="desc">
+    <strong>Что делает:</strong> ищет две неотрицательные матрицы <code>W</code> и <code>H</code>
+    такие, что <code>A ≈ W·H</code>. Обновление по правилу:
+    <code>H ← H · (WᵀA) / (WᵀWH)</code>,
+    <code>W ← W · (AHᵀ) / (WHHᵀ)</code>.
+    <strong>Где используется:</strong> тематическое моделирование текстов,
+    разложение спектров, разделение аудио, рекомендации.
+  </div>
+  <div class="example">
+    🧩 <strong>Пример из жизни:</strong> Есть 1000 документов и 5000 уникальных слов.
+    NMF с k=10 находит 10 «тем»: W говорит, сколько каждая тема есть в каждом документе,
+    H — какие слова образуют каждую тему. Человек читает 10 списков слов вместо 1000 текстов.
+  </div>
+  <div class="code-grid">
+    <!-- JS -->
+    <div class="code-col lang-js">
+      <div class="code-col-head">
+        <div class="lang-label">JavaScript</div>
+        <button class="copy-btn">Копировать</button>
+      </div>
+      <pre><span class="cm">// NMF — мультипликативное обновление (MU)</span>
+<span class="kw">export</span> <span class="kw">function</span> <span class="fn">nmfReconstructHistory</span>(A, k, totalIters) {
+  <span class="kw">const</span> { m, n } = <span class="fn">dims</span>(A);
+  <span class="cm">// Если есть отрицательные — сдвигаем вверх</span>
+  <span class="kw">const</span> shift = <span class="fn">minMax</span>(A).mn &lt; <span class="num">0</span> ? -<span class="fn">minMax</span>(A).mn : <span class="num">0</span>;
+  <span class="kw">const</span> X = A.<span class="fn">map</span>(r =&gt; r.<span class="fn">map</span>(v =&gt; v + shift));
+
+  <span class="cm">// Случайная инициализация W (m×k) и H (k×n)</span>
+  <span class="kw">let</span> W = <span class="fn">zeros</span>(m, k), H = <span class="fn">zeros</span>(k, n);
+  <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; m; i++)
+    <span class="kw">for</span> (<span class="kw">let</span> t = <span class="num">0</span>; t &lt; k; t++) W[i][t] = <span class="fn">rnd</span>();
+  <span class="kw">for</span> (<span class="kw">let</span> t = <span class="num">0</span>; t &lt; k; t++)
+    <span class="kw">for</span> (<span class="kw">let</span> j = <span class="num">0</span>; j &lt; n; j++) H[t][j] = <span class="fn">rnd</span>();
+
+  <span class="kw">for</span> (<span class="kw">let</span> it = <span class="num">0</span>; it &lt; totalIters; it++) {
+    <span class="cm">// Обновление H: H ← H · (WᵀX) / (WᵀW·H)</span>
+    <span class="kw">const</span> WT_X = <span class="fn">dot</span>(<span class="fn">transpose</span>(W), X);
+    <span class="kw">const</span> WT_W_H = <span class="fn">dot</span>(<span class="fn">dot</span>(<span class="fn">transpose</span>(W), W), H);
+    <span class="kw">for</span> (<span class="kw">let</span> t = <span class="num">0</span>; t &lt; k; t++)
+      <span class="kw">for</span> (<span class="kw">let</span> j = <span class="num">0</span>; j &lt; n; j++)
+        H[t][j] *= WT_X[t][j] / (WT_W_H[t][j] + <span class="num">1e-9</span>);
+
+    <span class="cm">// Обновление W: W ← W · (X·Hᵀ) / (W·H·Hᵀ)</span>
+    <span class="kw">const</span> X_HT = <span class="fn">dot</span>(X, <span class="fn">transpose</span>(H));
+    <span class="kw">const</span> W_H_HT = <span class="fn">dot</span>(W, <span class="fn">dot</span>(H, <span class="fn">transpose</span>(H)));
+    <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; m; i++)
+      <span class="kw">for</span> (<span class="kw">let</span> t = <span class="num">0</span>; t &lt; k; t++)
+        W[i][t] *= X_HT[i][t] / (W_H_HT[i][t] + <span class="num">1e-9</span>);
+  }
+  <span class="cm">// Ã = W·H, отнимаем сдвиг, который прибавляли</span>
+  <span class="kw">const</span> Ahat = <span class="fn">dot</span>(W, H).<span class="fn">map</span>(r =&gt; r.<span class="fn">map</span>(v =&gt; v - shift));
+  <span class="kw">return</span> { result: { Ahat, W, H }, history };
+}</pre>
+    </div>
+    <!-- Python -->
+    <div class="code-col lang-py">
+      <div class="code-col-head">
+        <div class="lang-label">Python</div>
+        <button class="copy-btn">Копировать</button>
+      </div>
+      <pre><span class="cm"># NMF — мультипликативное обновление</span>
+<span class="kw">import</span> numpy <span class="kw">as</span> np
+<span class="kw">from</span> sklearn.decomposition <span class="kw">import</span> NMF
+
+<span class="kw">def</span> <span class="fn">nmf_reconstruct</span>(A, k, total_iters=<span class="num">80</span>):
+    <span class="cm"># Сдвиг для неотрицательности</span>
+    shift = -A.<span class="fn">min</span>() <span class="kw">if</span> A.<span class="fn">min</span>() &lt; <span class="num">0</span> <span class="kw">else</span> <span class="num">0</span>
+    X = A + shift
+    <span class="cm"># Случайная инициализация</span>
+    W = np.<span class="fn">random</span>.<span class="fn">rand</span>(A.<span class="fn">shape</span>[<span class="num">0</span>], k) + <span class="num">0.5</span>
+    H = np.<span class="fn">random</span>.<span class="fn">rand</span>(k, A.<span class="fn">shape</span>[<span class="num">1</span>]) + <span class="num">0.5</span>
+    eps = <span class="num">1e-9</span>
+    <span class="kw">for</span> _ <span class="kw">in</span> <span class="fn">range</span>(total_iters):
+        <span class="cm"># H ← H · (WᵀX) / (WᵀW·H)</span>
+        H *= (W.T @ X) / (W.T @ W @ H + eps)
+        <span class="cm"># W ← W · (X·Hᵀ) / (W·H·Hᵀ)</span>
+        W *= (X @ H.T) / (W @ H @ H.T + eps)
+    <span class="cm"># Ã = W·H, убираем сдвиг</span>
+    Ahat = W @ H - shift
+    <span class="kw">return</span> Ahat, W, H
+
+<span class="cm"># Или через sklearn:</span>
+<span class="kw">def</span> <span class="fn">nmf_sklearn</span>(A, k):
+    model = NMF(<span class="kw">n_components</span>=k, <span class="kw">init</span>=<span class="str">'random'</span>,
+                <span class="kw">max_iter</span>=<span class="num">200</span>, <span class="kw">random_state</span>=<span class="num">0</span>)
+    W = model.<span class="fn">fit_transform</span>(A)   <span class="cm"># веса тем</span>
+    H = model.<span class="fn">components_</span>        <span class="cm"># сами темы</span>
+    Ahat = W @ H
+    <span class="kw">return</span> Ahat, W, H</pre>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     4. CUR
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div class="algo-block" id="cur">
+  <div class="algo-header">
+    <h2>4. CUR — разложение по строкам и столбцам</h2>
+    <span class="badge">выбор + псевдообратная</span>
+  </div>
+  <div class="desc">
+    <strong>Что делает:</strong> выбирает k самых «важных» столбцов (C) и k самых
+    «важных» строк (R) по евклидовой норме, строит связующую матрицу
+    <code>U ≈ W⁺</code> (псевдообратная к пересечению C и R).
+    Итог: <code>A ≈ C·U·R</code>.
+    <strong>Где используется:</strong> работа с разреженными данными,
+    когда интерпретируемость важнее точности (выбранные столбцы — реальные признаки).
+  </div>
+  <div class="example">
+    🧩 <strong>Пример из жизни:</strong> Анализ покупок в интернет-магазине: матрица
+    10⁶ пользователей × 10⁵ товаров. CUR выбирает 20 реальных товаров (столбцов)
+    и 20 реальных покупателей (строк), давая интерпретируемое приближение —
+    в отличие от SVD, где U и V — абстрактные комбинации.
+  </div>
+  <div class="code-grid">
+    <!-- JS -->
+    <div class="code-col lang-js">
+      <div class="code-col-head">
+        <div class="lang-label">JavaScript</div>
+        <button class="copy-btn">Копировать</button>
+      </div>
+      <pre><span class="cm">// CUR — выбор столбцов и строк по норме</span>
+<span class="kw">export</span> <span class="kw">function</span> <span class="fn">curReconstruct</span>(A, k) {
+  <span class="kw">const</span> { m, n } = <span class="fn">dims</span>(A);
+  <span class="kw">const</span> r = <span class="type">Math</span>.<span class="fn">max</span>(<span class="num">1</span>, <span class="type">Math</span>.<span class="fn">min</span>(k, m, n));
+
+  <span class="cm">// Считаем квадраты длин столбцов и строк</span>
+  <span class="kw">const</span> colNorms = <span class="kw">new</span> <span class="type">Array</span>(n).<span class="fn">fill</span>(<span class="num">0</span>);
+  <span class="kw">const</span> rowNorms = <span class="kw">new</span> <span class="type">Array</span>(m).<span class="fn">fill</span>(<span class="num">0</span>);
+  <span class="kw">for</span> (<span class="kw">let</span> j = <span class="num">0</span>; j &lt; n; j++)
+    <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; m; i++) colNorms[j] += A[i][j] ** <span class="num">2</span>;
+  <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; m; i++)
+    <span class="kw">for</span> (<span class="kw">let</span> j = <span class="num">0</span>; j &lt; n; j++) rowNorms[i] += A[i][j] ** <span class="num">2</span>;
+
+  <span class="cm">// Топ-r столбцов и строк по убыванию нормы</span>
+  <span class="kw">const</span> topCols = [...<span class="type">Array</span>(n).<span class="fn">keys</span>()]
+    .<span class="fn">sort</span>((a, b) =&gt; colNorms[b] - colNorms[a]).<span class="fn">slice</span>(<span class="num">0</span>, r);
+  <span class="kw">const</span> topRows = [...<span class="type">Array</span>(m).<span class="fn">keys</span>()]
+    .<span class="fn">sort</span>((a, b) =&gt; rowNorms[b] - rowNorms[a]).<span class="fn">slice</span>(<span class="num">0</span>, r);
+
+  <span class="cm">// C: выбранные столбцы (m×r), R: выбранные строки (r×n)</span>
+  <span class="kw">const</span> C = <span class="fn">zeros</span>(m, r), R = <span class="fn">zeros</span>(r, n);
+  <span class="kw">const</span> Wcore = <span class="fn">zeros</span>(r, r);  <span class="cm">// пересечение C ∩ R</span>
+  <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; m; i++)
+    <span class="kw">for</span> (<span class="kw">let</span> t = <span class="num">0</span>; t &lt; r; t++) C[i][t] = A[i][topCols[t]];
+  <span class="kw">for</span> (<span class="kw">let</span> t = <span class="num">0</span>; t &lt; r; t++)
+    <span class="kw">for</span> (<span class="kw">let</span> j = <span class="num">0</span>; j &lt; n; j++) R[t][j] = A[topRows[t]][j];
+  <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; r; i++)
+    <span class="kw">for</span> (<span class="kw">let</span> j = <span class="num">0</span>; j &lt; r; j++) Wcore[i][j] = A[topRows[i]][topCols[j]];
+
+  <span class="cm">// U = W⁺ — псевдообратная через SVD малой матрицы r×r</span>
+  <span class="kw">const</span> Uc = <span class="fn">pinv</span>(Wcore);
+
+  <span class="cm">// Ã = C · U · R</span>
+  <span class="kw">const</span> Ahat = <span class="fn">dot</span>(<span class="fn">dot</span>(C, Uc), R);
+  <span class="kw">return</span> { Ahat, C, U: Uc, R, Wcore, topRows, topCols, r };
+}</pre>
+    </div>
+    <!-- Python -->
+    <div class="code-col lang-py">
+      <div class="code-col-head">
+        <div class="lang-label">Python</div>
+        <button class="copy-btn">Копировать</button>
+      </div>
+      <pre><span class="cm"># CUR — выбор по норме + псевдообратная</span>
+<span class="kw">import</span> numpy <span class="kw">as</span> np
+
+<span class="kw">def</span> <span class="fn">cur_reconstruct</span>(A, k):
+    m, n = A.<span class="fn">shape</span>
+    r = <span class="fn">max</span>(<span class="num">1</span>, <span class="fn">min</span>(k, m, n))
+
+    <span class="cm"># Квадраты длин столбцов и строк</span>
+    col_norms = np.<span class="fn">linalg</span>.<span class="fn">norm</span>(A, axis=<span class="num">0</span>) ** <span class="num">2</span>
+    row_norms = np.<span class="fn">linalg</span>.<span class="fn">norm</span>(A, axis=<span class="num">1</span>) ** <span class="num">2</span>
+
+    <span class="cm"># Индексы топ-r столбцов и строк</span>
+    top_cols = np.<span class="fn">argsort</span>(col_norms)[-r:][::-<span class="num">1</span>]
+    top_rows = np.<span class="fn">argsort</span>(row_norms)[-r:][::-<span class="num">1</span>]
+
+    <span class="cm"># C, R и W (пересечение)</span>
+    C = A[:, top_cols]          <span class="cm"># m×r</span>
+    R = A[top_rows, :]          <span class="cm"># r×n</span>
+    Wcore = A[top_rows[:, <span class="const">None</span>], top_cols]  <span class="cm"># r×r</span>
+
+    <span class="cm"># U = псевдообратная к W (через SVD)</span>
+    Uc = np.<span class="fn">linalg</span>.<span class="fn">pinv</span>(Wcore)     <span class="cm"># r×r</span>
+
+    <span class="cm"># Ã = C · U · R</span>
+    Ahat = C @ Uc @ R
+    <span class="kw">return</span> {<span class="str">'Ahat'</span>: Ahat, <span class="str">'C'</span>: C,
+            <span class="str">'U'</span>: Uc, <span class="str">'R'</span>: R,
+            <span class="str">'top_rows'</span>: top_rows,
+            <span class="str">'top_cols'</span>: top_cols}</pre>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     5. ALS
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div class="algo-block" id="als">
+  <div class="algo-header">
+    <h2>5. ALS — попеременные наименьшие квадраты</h2>
+    <span class="badge">итеративное уточнение</span>
+  </div>
+  <div class="desc">
+    <strong>Что делает:</strong> ищет <code>A ≈ X·Yᵀ</code>, попеременно фиксируя
+    одну матрицу и уточняя другую через МНК с регуляризацией.
+    <code>X ← argmin ||A − X·Yᵀ||²</code> при фиксированном Y (решается
+    через нормальные уравнения).
+    <strong>Где используется:</strong> рекомендательные системы (Netflix Prize),
+    коллаборативная фильтрация, заполнение пропусков в данных.
+  </div>
+  <div class="example">
+    🧩 <strong>Пример из жизни:</strong> Netflix: матрица 500К пользователей × 18К фильмов
+    с рейтингами (много пропусков). ALS находит 50-мерные векторы пользователей (X)
+    и фильмов (Y), предсказывая рейтинг любого фильма для любого пользователя
+    как скалярное произведение <code>xᵤ·yᵢ</code> — основа рекомендаций.
+  </div>
+  <div class="note">
+    В отличие от NMF, ALS работает с любыми числами (отрицательные тоже),
+    и использует явную регуляризацию λ для борьбы с переобучением.
+  </div>
+  <div class="code-grid">
+    <!-- JS -->
+    <div class="code-col lang-js">
+      <div class="code-col-head">
+        <div class="lang-label">JavaScript</div>
+        <button class="copy-btn">Копировать</button>
+      </div>
+      <pre><span class="cm">// ALS — попеременные наименьшие квадраты</span>
+<span class="kw">export</span> <span class="kw">function</span> <span class="fn">alsReconstructHistory</span>(A, k, totalIters, reg = <span class="num">1e-2</span>) {
+  <span class="kw">const</span> { m, n } = <span class="fn">dims</span>(A);
+  <span class="kw">const</span> r = <span class="type">Math</span>.<span class="fn">max</span>(<span class="num">1</span>, <span class="type">Math</span>.<span class="fn">min</span>(k, m, n));
+
+  <span class="cm">// Случайные начальные X (m×r) и Y (n×r)</span>
+  <span class="kw">let</span> X = <span class="fn">zeros</span>(m, r), Y = <span class="fn">zeros</span>(n, r);
+  <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; m; i++)
+    <span class="kw">for</span> (<span class="kw">let</span> t = <span class="num">0</span>; t &lt; r; t++) X[i][t] = <span class="fn">rnd</span>();
+  <span class="kw">for</span> (<span class="kw">let</span> j = <span class="num">0</span>; j &lt; n; j++)
+    <span class="kw">for</span> (<span class="kw">let</span> t = <span class="num">0</span>; t &lt; r; t++) Y[j][t] = <span class="fn">rnd</span>();
+
+  <span class="kw">for</span> (<span class="kw">let</span> it = <span class="num">0</span>; it &lt; totalIters; it++) {
+    <span class="cm">// --- Фиксируем Y, уточняем X ---</span>
+    <span class="cm">// Yᵀ·Y + λ·I (r×r — маленькая, решаем быстро)</span>
+    <span class="kw">const</span> YTY = <span class="fn">dot</span>(<span class="fn">transpose</span>(Y), Y);
+    <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; r; i++) YTY[i][i] += reg;
+    <span class="cm">// Для каждой строки i: xᵢ = (YᵀY)⁻¹ · Yᵀ·aᵢ</span>
+    <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; m; i++) {
+      <span class="kw">const</span> rhs = <span class="kw">new</span> <span class="type">Array</span>(r).<span class="fn">fill</span>(<span class="num">0</span>);
+      <span class="kw">for</span> (<span class="kw">let</span> t = <span class="num">0</span>; t &lt; r; t++)
+        <span class="kw">for</span> (<span class="kw">let</span> j = <span class="num">0</span>; j &lt; n; j++) rhs[t] += Y[j][t] * A[i][j];
+      <span class="kw">const</span> sol = <span class="fn">numeric</span>.<span class="fn">solve</span>(YTY, rhs);
+      <span class="kw">for</span> (<span class="kw">let</span> t = <span class="num">0</span>; t &lt; r; t++) X[i][t] = sol[t];
+    }
+    <span class="cm">// --- Фиксируем X, уточняем Y ---</span>
+    <span class="kw">const</span> XTX = <span class="fn">dot</span>(<span class="fn">transpose</span>(X), X);
+    <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; r; i++) XTX[i][i] += reg;
+    <span class="kw">for</span> (<span class="kw">let</span> j = <span class="num">0</span>; j &lt; n; j++) {
+      <span class="kw">const</span> rhs = <span class="kw">new</span> <span class="type">Array</span>(r).<span class="fn">fill</span>(<span class="num">0</span>);
+      <span class="kw">for</span> (<span class="kw">let</span> t = <span class="num">0</span>; t &lt; r; t++)
+        <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; m; i++) rhs[t] += X[i][t] * A[i][j];
+      <span class="kw">const</span> sol = <span class="fn">numeric</span>.<span class="fn">solve</span>(XTX, rhs);
+      <span class="kw">for</span> (<span class="kw">let</span> t = <span class="num">0</span>; t &lt; r; t++) Y[j][t] = sol[t];
+    }
+  }
+  <span class="cm">// Ã = X·Yᵀ</span>
+  <span class="kw">const</span> Ahat = <span class="fn">dot</span>(X, <span class="fn">transpose</span>(Y));
+  <span class="kw">return</span> { result: { Ahat, X, Y, r, reg }, history };
+}</pre>
+    </div>
+    <!-- Python -->
+    <div class="code-col lang-py">
+      <div class="code-col-head">
+        <div class="lang-label">Python</div>
+        <button class="copy-btn">Копировать</button>
+      </div>
+      <pre><span class="cm"># ALS — попеременные наименьшие квадраты</span>
+<span class="kw">import</span> numpy <span class="kw">as</span> np
+
+<span class="kw">def</span> <span class="fn">als_reconstruct</span>(A, k, total_iters=<span class="num">80</span>, reg=<span class="num">1e-2</span>):
+    m, n = A.<span class="fn">shape</span>
+    r = <span class="fn">min</span>(k, m, n)
+
+    <span class="cm"># Случайная инициализация</span>
+    X = np.<span class="fn">random</span>.<span class="fn">randn</span>(m, r) * <span class="num">0.5</span>
+    Y = np.<span class="fn">random</span>.<span class="fn">randn</span>(n, r) * <span class="num">0.5</span>
+
+    I = np.<span class="fn">eye</span>(r)  <span class="cm"># единичная для регуляризации</span>
+
+    <span class="kw">for</span> _ <span class="kw">in</span> <span class="fn">range</span>(total_iters):
+        <span class="cm"># --- Шаг X: X = A·Y · (YᵀY + λ·I)⁻¹ ---</span>
+        YTY = Y.T @ Y + reg * I          <span class="cm"># r×r</span>
+        X = (A @ Y) @ np.<span class="fn">linalg</span>.<span class="fn">inv</span>(YTY)  <span class="cm"># m×r</span>
+
+        <span class="cm"># --- Шаг Y: Y = Aᵀ·X · (XᵀX + λ·I)⁻¹ ---</span>
+        XTX = X.T @ X + reg * I          <span class="cm"># r×r</span>
+        Y = (A.T @ X) @ np.<span class="fn">linalg</span>.<span class="fn">inv</span>(XTX)  <span class="cm"># n×r</span>
+
+    <span class="cm"># Ã = X·Yᵀ</span>
+    Ahat = X @ Y.T
+    <span class="kw">return</span> Ahat, X, Y
+
+<span class="cm"># Компактная версия через solve (численно устойчивее):</span>
+<span class="kw">def</span> <span class="fn">als_solve</span>(A, k, total_iters=<span class="num">80</span>, reg=<span class="num">1e-2</span>):
+    m, n = A.<span class="fn">shape</span>
+    r = <span class="fn">min</span>(k, m, n)
+    X = np.<span class="fn">random</span>.<span class="fn">randn</span>(m, r) * <span class="num">0.5</span>
+    Y = np.<span class="fn">random</span>.<span class="fn">randn</span>(n, r) * <span class="num">0.5</span>
+    I = np.<span class="fn">eye</span>(r)
+    <span class="kw">for</span> _ <span class="kw">in</span> <span class="fn">range</span>(total_iters):
+        X = np.<span class="fn">linalg</span>.<span class="fn">solve</span>(Y.T @ Y + reg * I, (A @ Y).T).T
+        Y = np.<span class="fn">linalg</span>.<span class="fn">solve</span>(X.T @ X + reg * I, (A.T @ X).T).T
+    <span class="kw">return</span> X @ Y.T, X, Y</pre>
+    </div>
+  </div>
+</div>
+
+<hr>
+<p class="subtitle" style="text-align:center; margin-top:1rem;">
+  Matrix Lab — визуализация и код матричных разложений
+</p>
+
+ </div>
+<script>
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".copy-btn");
+    if (!btn) return;
+    const pre = btn.closest(".code-col").querySelector("pre");
+    if (!pre) return;
+    const text = pre.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = "Скопировано!";
+      btn.classList.add("copied");
+      setTimeout(() => { btn.textContent = orig; btn.classList.remove("copied"); }, 1800);
+    }).catch(() => {
+      btn.textContent = "Ошибка";
+      setTimeout(() => { btn.textContent = "Копировать"; }, 1500);
+    });
+  });
+</script>
+</body>
+</html>

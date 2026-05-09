@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Matrix Lab — интерактивные разложения</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>Matrix Lab</h1>
+        <p>Интерактивное исследование матричных разложений — SVD, PCA, NMF, CUR, ALS</p>
+      </div>
+    </header>
+
+    <nav class="tab-bar" role="tablist">
+      <button class="tab-btn active" role="tab" data-tab="matrix" aria-selected="true">Матрица A</button>
+      <button class="tab-btn" role="tab" data-tab="decomp" aria-selected="false">Разложения</button>
+      <button class="tab-btn" role="tab" data-tab="exp" aria-selected="false">Эксперименты</button>
+      <button class="tab-btn" role="tab" data-tab="theory" aria-selected="false">Теория</button>
+      <button class="tab-btn" role="tab" data-tab="code" aria-selected="false">Код</button>
+    </nav>
+
+    <main class="app-body">
+      <div id="panel-matrix" class="tab-panel active" role="tabpanel"></div>
+      <div id="panel-decomp" class="tab-panel" role="tabpanel"></div>
+      <div id="panel-exp" class="tab-panel" role="tabpanel"></div>
+      <div id="panel-theory" class="tab-panel" role="tabpanel"></div>
+      <div id="panel-code" class="tab-panel" role="tabpanel"></div>
+    </main>
+
+    <footer class="app-footer">
+      <code>python3 -m http.server 8080</code> &mdash; запустить локально в папке matrix-lab
+    </footer>
+
+    <script src="./assets/numeric.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
