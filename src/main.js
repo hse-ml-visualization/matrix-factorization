@@ -7,12 +7,14 @@ import { svdTruncated, pcaReconstruct, pcaReconstructWithSteps, nmfReconstruct, 
 import { renderCenterEdgeExperiment, renderPerturbation } from "./experiments.js";
 import { renderTheoryPage } from "./theory.js";
 import { renderCodePage } from "./code.js";
+import { renderCalcPage } from "./calculator.js";
 
 const panelMatrix = document.getElementById("panel-matrix");
 const panelDecomp = document.getElementById("panel-decomp");
 const panelExp = document.getElementById("panel-exp");
 const panelTheory = document.getElementById("panel-theory");
 const panelCode = document.getElementById("panel-code");
+const panelCalc = document.getElementById("panel-calc");
 
 const state = {
   seed: 42,
@@ -655,6 +657,7 @@ function setupTabs() {
     exp: panelExp,
     theory: panelTheory,
     code: panelCode,
+    calc: panelCalc,
   };
 
   buttons.forEach((btn) => {
@@ -675,6 +678,7 @@ function setupTabs() {
       else if (tab === "exp") renderTabExp();
       else if (tab === "theory") renderTheoryPage(panelTheory);
       else if (tab === "code") renderCodePage(panelCode);
+      else if (tab === "calc") renderCalcPage(panelCalc);
     });
   });
 }
