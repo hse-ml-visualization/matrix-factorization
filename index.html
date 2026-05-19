@@ -9,9 +9,38 @@
   </head>
   <body>
     <header class="app-header">
-      <div>
-        <h1>Matrix Lab</h1>
-        <p>Интерактивное исследование матричных разложений — SVD, PCA, NMF, CUR, ALS</p>
+      <div class="app-header__left">
+        <div class="app-header__icon-wrap">
+          <svg class="app-header__icon" viewBox="0 0 40 40" width="38" height="38" aria-hidden="true">
+            <defs>
+              <linearGradient id="header-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#5b9cf6"/>
+                <stop offset="50%" stop-color="#a78bfa"/>
+                <stop offset="100%" stop-color="#4ade80"/>
+              </linearGradient>
+              <filter id="header-glow" x="-50%" y="-50%" width="200%" height="200%">
+                <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#5b9cf6" flood-opacity="0.7"/>
+              </filter>
+            </defs>
+            <rect x="5" y="5" width="30" height="30" rx="5" fill="rgba(91,156,246,0.08)" stroke="url(#header-grad)" stroke-width="2" stroke-linejoin="round"/>
+            <text x="8" y="16" font-size="7.5" fill="#dde4f0" font-weight="800" font-family="monospace" filter="url(#header-glow)">a</text>
+            <text x="23" y="16" font-size="7.5" fill="#dde4f0" font-weight="800" font-family="monospace" filter="url(#header-glow)">b</text>
+            <text x="8" y="28" font-size="7.5" fill="#dde4f0" font-weight="800" font-family="monospace" filter="url(#header-glow)">c</text>
+            <text x="23" y="28" font-size="7.5" fill="#dde4f0" font-weight="800" font-family="monospace" filter="url(#header-glow)">d</text>
+            <circle cx="5" cy="5" r="2.5" fill="#4ade80" opacity="0.6">
+              <animate attributeName="opacity" values="0.3;0.8;0.3" dur="2s" repeatCount="indefinite"/>
+            </circle>
+            <circle cx="35" cy="35" r="2.5" fill="#a78bfa" opacity="0.6">
+              <animate attributeName="opacity" values="0.8;0.3;0.8" dur="2.5s" repeatCount="indefinite"/>
+            </circle>
+          </svg>
+          <div class="app-header__corner app-header__corner--tl"></div>
+          <div class="app-header__corner app-header__corner--br"></div>
+        </div>
+        <div>
+          <h1>Matrix Lab</h1>
+          <p>Интерактивное исследование матричных разложений — SVD, PCA, NMF, CUR, ALS</p>
+        </div>
       </div>
     </header>
 
@@ -30,10 +59,6 @@
       <div id="panel-code" class="tab-panel" role="tabpanel"></div>
       <div id="panel-calc" class="tab-panel" role="tabpanel"></div>
     </main>
-
-    <footer class="app-footer">
-      <code>python3 -m http.server 8080</code> &mdash; запустить локально в папке matrix-lab
-    </footer>
 
     <script src="./assets/numeric.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>

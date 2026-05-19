@@ -43,6 +43,79 @@ function saveValues() {
   calcState.values = vals;
 }
 
+// ── helpers for colourful heatmaps ──
+
+function parseLatexMatrices(latex) {
+  const re = /\\begin\{bmatrix\}([\s\S]*?)\\end\{bmatrix\}/g;
+  const results = [];
+  let m;
+  while ((m = re.exec(latex)) !== null) {
+    const rows = m[1].split("\\\\").map(r =>
+      r.split("&").map(c => {
+        const cleaned = c.trim();
+        const num = parseFloat(cleaned);
+        return isNaN(num) ? null : num;
+      })
+    ).filter(r => r.length > 0);
+    if (rows.length && rows.every(r => r.every(v => v !== null))) {
+      results.push(rows);
+    }
+  }
+  return results.length ? results : null;
+}
+
+function renderMatrixHeatmap(values) {
+  if (!values || !values.length) return null;
+  const flat = values.flat().filter(v => v !== null);
+  if (!flat.length) return null;
+  const mx = Math.max(...flat.map(Math.abs), 1e-12);
+  const wrap = document.createElement("span");
+  wrap.style.cssText = "display:inline-grid;vertical-align:middle;margin-left:0.5rem;" +
+    `grid-template-columns:repeat(${values[0].length},28px);gap:2px`;
+  let cellIdx = 0;
+  for (const row of values) {
+    for (const v of row) {
+      if (v === null) continue;
+      const t = v / mx;
+      const r = Math.round(255 * Math.max(0, t));
+      const b = Math.round(255 * Math.max(0, -t));
+      const g = Math.round(255 * (1 - Math.abs(t)));
+      const cell = document.createElement("span");
+      cell.style.cssText = `display:inline-flex;align-items:center;justify-content:center;` +
+        `width:28px;height:26px;border-radius:4px;font-size:0.65rem;font-family:monospace;` +
+        `color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.5);` +
+        `background:rgb(${r},${g},${b});cursor:default;`;
+      cell.textContent = v.toFixed(v % 1 === 0 ? 0 : 2);
+      cell.animate([
+        { opacity: 0, transform: "scale(0)" },
+        { opacity: 1, transform: "scale(1.15)", offset: 0.6 },
+        { opacity: 1, transform: "scale(1)" }
+      ], { duration: 350, easing: "cubic-bezier(0.34,1.56,0.64,1)", delay: cellIdx * 60, fill: "both" });
+      cell.addEventListener("mouseenter", () => { cell.style.transform = "scale(1.25)"; cell.style.boxShadow = "0 0 12px rgba(255,255,255,0.5)"; });
+      cell.addEventListener("mouseleave", () => { cell.style.transform = ""; cell.style.boxShadow = ""; });
+      wrap.appendChild(cell);
+      cellIdx++;
+    }
+  }
+  return wrap;
+}
+
+function animateStep(el, delay, type) {
+  const dur = type === "math" ? 550 : 450;
+  el.animate([
+    { opacity: 0, transform: "translateX(-20px) scale(0.95)" },
+    { opacity: 1, transform: "translateX(0) scale(1)" }
+  ], { duration: dur, easing: "cubic-bezier(0.34,1.56,0.64,1)", delay: delay * 1000, fill: "both" });
+  const glow = document.createElement("div");
+  glow.style.cssText = "position:absolute;inset:0;border-radius:8px;pointer-events:none;" +
+    `background:${type === "math" ? "rgba(99,102,241,0.12)" : "rgba(99,102,241,0.06)"};`;
+  glow.animate([
+    { opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 0 }
+  ], { duration: 700, easing: "ease", delay: delay * 1000, fill: "both" });
+  el.style.position = "relative";
+  el.appendChild(glow);
+}
+
 export function renderCalcPage(container) {
   container.innerHTML = "";
 
@@ -59,20 +132,29 @@ export function renderCalcPage(container) {
     .calc-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .calc-error { color: var(--bad); font-size: 0.85rem; padding: 0.5rem; background: rgba(248,113,113,0.1); border-radius: 8px; }
     .calc-matrix-table input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-    .calc-step-text { font-size: 0.85rem; line-height: 1.6; margin-bottom: 0.3rem; color: var(--text); }
-    .calc-step-math { overflow-x: auto; padding: 0.5rem 0.7rem; margin: 0.3rem 0; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; text-align: center; }
+    .calc-step-num { display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:0.65rem;font-weight:700;margin-right:0.5rem;flex-shrink:0;animation:cellPop 0.35s cubic-bezier(0.34,1.56,0.64,1) both; }
+    .calc-step-num--math { margin:-0.1rem 0.3rem 0 0;align-self:flex-start; }
+    .calc-step-text { font-size: 0.85rem; line-height: 1.6; margin-bottom: 0.3rem; color: var(--text); padding: 0.3rem 0.6rem; border-left: 3px solid rgba(99,102,241,0.4); background: rgba(99,102,241,0.04); border-radius: 0 6px 6px 0; display:flex;align-items:baseline;gap:0.2rem; }
+    .calc-step-math { overflow-x: auto; padding: 0.5rem 0.7rem; margin: 0.3rem 0; background: linear-gradient(135deg, rgba(0,0,0,0.15), rgba(99,102,241,0.06)); border: 1px solid var(--border); border-radius: 8px; text-align: center; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0.4rem; }
     .calc-step-math .katex { font-size: 1em; }
-    .calc-step-sub { font-size: 0.88rem; font-weight: 600; margin: 0.6rem 0 0.2rem; color: var(--text); }
+    .calc-step-sub { font-size: 0.88rem; font-weight: 600; margin: 0.6rem 0 0.2rem; color: var(--text); padding-left: 0.4rem; border-left: 3px solid var(--accent); }
     .calc-spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .calc-result-block { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    @keyframes stepSlideIn { from { opacity:0; transform:translateX(-20px) scale(0.95) } to { opacity:1; transform:translateX(0) scale(1) } }
+    @keyframes stepGlow { 0% { opacity:0 } 20% { opacity:1 } 100% { opacity:0 } }
+    @keyframes cellPop { 0% { opacity:0; transform:scale(0) } 60% { transform:scale(1.15) } 100% { opacity:1; transform:scale(1) } }
+    .calc-result-block { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; border-left: 3px solid var(--accent); }
+    .calc-result-block:nth-child(2) { border-left-color: #a78bfa; }
+    .calc-result-block:nth-child(3) { border-left-color: #34d399; }
+    .calc-result-block:nth-child(4) { border-left-color: #fb923c; }
+    .calc-result-block:nth-child(5) { border-left-color: #f472b6; }
     .calc-result-head {
       display: flex; align-items: center; justify-content: space-between;
       padding: 0.6rem 1rem; cursor: pointer;
-      background: rgba(255,255,255,0.03);
+      background: linear-gradient(135deg, rgba(255,255,255,0.04), rgba(99,102,241,0.03));
       user-select: none; transition: var(--transition);
     }
-    .calc-result-head:hover { background: rgba(255,255,255,0.06); }
+    .calc-result-head:hover { background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(99,102,241,0.06)); }
     .calc-result-head h4 { font-size: 0.9rem; font-weight: 600; color: var(--accent); margin: 0; }
     .calc-result-head .step-count { font-size: 0.72rem; color: var(--muted); }
     .calc-result-head .arrow { font-size: 0.7rem; color: var(--muted); transition: transform 0.2s; }
@@ -188,11 +270,20 @@ export function renderCalcPage(container) {
 
 function renderResults(card, data) {
   card.innerHTML = `<h3>Результаты разложений</h3>
-    <p class="muted" style="font-size:0.82rem;margin-bottom:0.8rem">
-      Исходная: <span class="math">${data.matrix_latex}</span>
+    <p class="muted" style="font-size:0.82rem;margin-bottom:0.8rem;display:flex;align-items:center;flex-wrap:wrap;gap:0.5rem">
+      <span>Исходная: <span class="math">${data.matrix_latex}</span></span>
       <span style="color:var(--muted)">(${data.shape[0]}×${data.shape[1]})</span>
     </p>
     <div class="calc-results"></div>`;
+
+  const headerP = card.querySelector("p");
+  const allOrig = parseLatexMatrices(data.matrix_latex);
+  if (allOrig) {
+    for (const m of allOrig) {
+      const hm = renderMatrixHeatmap(m);
+      if (hm) headerP.appendChild(hm);
+    }
+  }
 
   const host = card.querySelector(".calc-results");
   const order = ["svd", "pca", "nmf", "cur", "als"];
@@ -224,21 +315,51 @@ function renderResults(card, data) {
 
     const body = document.createElement("div");
     body.className = "calc-result-body";
+    block.appendChild(body);
 
+    // открываем SVD до анимации — иначе анимация не видна (display:none / вне DOM)
+    if (key === "svd") body.classList.add("open");
+
+    let stepIdx = 0;
+    let globalStepIdx = 0;
     for (const step of dec.steps) {
       if (step.type === "sub") {
         const el = document.createElement("div");
         el.className = "calc-step-sub";
         el.textContent = step.content;
         body.appendChild(el);
+        animateStep(el, stepIdx * 0.04, "sub");
+        stepIdx++;
       } else if (step.type === "text") {
         const el = document.createElement("div");
         el.className = "calc-step-text";
-        el.textContent = step.content;
+        const badge = document.createElement("span");
+        badge.className = "calc-step-num";
+        badge.textContent = String(++globalStepIdx);
+        badge.animate([
+          { opacity: 0, transform: "scale(0)" },
+          { opacity: 1, transform: "scale(1.15)", offset: 0.6 },
+          { opacity: 1, transform: "scale(1)" }
+        ], { duration: 350, easing: "cubic-bezier(0.34,1.56,0.64,1)", delay: (stepIdx * 0.04 + 0.1) * 1000, fill: "both" });
+        el.appendChild(badge);
+        const content = document.createElement("span");
+        content.textContent = step.content;
+        el.appendChild(content);
         body.appendChild(el);
+        animateStep(el, stepIdx * 0.04, "text");
+        stepIdx++;
       } else if (step.type === "math") {
         const el = document.createElement("div");
         el.className = "calc-step-math";
+        const badge = document.createElement("span");
+        badge.className = "calc-step-num calc-step-num--math";
+        badge.textContent = String(++globalStepIdx);
+        badge.animate([
+          { opacity: 0, transform: "scale(0)" },
+          { opacity: 1, transform: "scale(1.15)", offset: 0.6 },
+          { opacity: 1, transform: "scale(1)" }
+        ], { duration: 350, easing: "cubic-bezier(0.34,1.56,0.64,1)", delay: (stepIdx * 0.04 + 0.1) * 1000, fill: "both" });
+        el.appendChild(badge);
         try {
           if (window.katex) {
             el.innerHTML = window.katex.renderToString(step.content, {
@@ -251,11 +372,13 @@ function renderResults(card, data) {
         } catch {
           el.textContent = step.content;
         }
+        
         body.appendChild(el);
+        animateStep(el, stepIdx * 0.04, "math");
+        stepIdx++;
       }
     }
 
-    block.appendChild(body);
     host.appendChild(block);
 
     // toggle
@@ -264,9 +387,8 @@ function renderResults(card, data) {
       head.querySelector(".arrow").classList.toggle("open", isOpen);
     });
 
-    // open first block by default
+    // open first block by default (arrow class only — body уже открыт)
     if (key === "svd") {
-      body.classList.add("open");
       head.querySelector(".arrow").classList.add("open");
     }
   }

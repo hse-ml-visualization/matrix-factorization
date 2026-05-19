@@ -151,7 +151,7 @@ export function generateNmfPipeline(A, k, totalIters) {
 export function generateCurPipeline(A, k) {
   const { m, n } = dims(A);
   const result = curReconstruct(A, k);
-  const { Ahat, C, U, R, Wcore, topRows, topCols, r } = result;
+  const { Ahat, C, U, R, Wcore, topRows, topCols, r, Cp, Rp } = result;
   const scaleA = minMax(A);
   const colNorms = new Array(n).fill(0);
   const rowNorms = new Array(m).fill(0);
@@ -168,12 +168,8 @@ export function generateCurPipeline(A, k) {
     { title: "R (строки)", data: R, subtitle: `${r}×${n}` },
     { title: "W (пересечение)", data: Wcore, subtitle: `${r}×${r}` },
   ]});
-  const svdW = numeric.svd(Wcore);
-  const pinvSigma = zeros(r, r);
-  const tol = 1e-10;
-  for (let i = 0; i < svdW.S.length && i < r; i++) pinvSigma[i][i] = svdW.S[i] > tol ? 1 / svdW.S[i] : 0;
-  steps.push({ type: "arrow", label: "Псевдообратная: U = W⁺", op: "transpose", data: { type: "pseudoinverse", W: Wcore, U: svdW.U, S: svdW.S, V: svdW.V, SigmaInv: pinvSigma, Wpinv: U, scale: minMax(Wcore) } });
-  steps.push({ type: "matrix", id: "U", title: "U ≈ W⁺", subtitle: "Псевдообратная", data: U, scale: minMax(U) });
+  steps.push({ type: "arrow", label: "Псевдообратная: C⁺, R⁺, U = C⁺·A·R⁺", op: "transpose", data: { type: "pseudoinverse", C, R, Cp, Rp, A, U, W: Wcore } });
+  steps.push({ type: "matrix", id: "U", title: "U = C⁺·A·R⁺", subtitle: "Связующая матрица", data: U, scale: minMax(U) });
   steps.push({ type: "arrow", label: "Восстанавливаем: C·U·R", op: "multiply", data: { type: "triple_product", aLabel: "C", a: C, bLabel: "U", b: U, cLabel: "R", c: R, resultLabel: "Ã", result: Ahat } });
   steps.push({ type: "matrix", id: "Ahat", title: "Ã ≈ C·U·R", subtitle: "CUR-приближение", data: Ahat, scale: scaleA });
   steps.push({ type: "arrow", label: "Анализ ошибки", op: "normalize", data: { type: "error_detail", A, Ahat, scale: minMax(A) } });
@@ -342,6 +338,23 @@ function renderErrorStep(step) {
       <span class="vis-error__val">${fn.toFixed(4)}</span>
     </div>
   `;
+
+  // Visual scale bar
+  const scaleWrap = document.createElement("div");
+  scaleWrap.className = "vis-error__scale";
+  const scaleBar = document.createElement("div");
+  scaleBar.style.cssText = "height:10px;border-radius:5px;background:linear-gradient(to right, #4ade80, #a3e635, #facc15, #fb923c, #ef4444);position:relative;overflow:hidden";
+  const marker = document.createElement("div");
+  const pos = Math.min(1, Math.max(0, pct / 50));
+  marker.style.cssText = `position:absolute;top:-3px;left:${pos * 100}%;width:4px;height:16px;background:#fff;border-radius:2px;transform:translateX(-50%);box-shadow:0 0 6px rgba(255,255,255,0.8);transition:left 0.4s ease`;
+  scaleBar.appendChild(marker);
+  scaleWrap.appendChild(scaleBar);
+
+  const labelsRow = document.createElement("div");
+  labelsRow.style.cssText = "display:flex;justify-content:space-between;font-size:0.6rem;color:var(--muted);margin-top:0.15rem";
+  labelsRow.innerHTML = `<span>отлично<br><span style="font-size:0.5rem;opacity:0.6">0–1%</span></span><span>хорошо<br><span style="font-size:0.5rem;opacity:0.6">1–5%</span></span><span>удовл.<br><span style="font-size:0.5rem;opacity:0.6">5–15%</span></span><span>плохо<br><span style="font-size:0.5rem;opacity:0.6">15–30%</span></span><span>критично<br><span style="font-size:0.5rem;opacity:0.6">&gt;30%</span></span>`;
+  scaleWrap.appendChild(labelsRow);
+  wrap.appendChild(scaleWrap);
   return wrap;
 }
 
@@ -611,7 +624,7 @@ function liveProduct(body, data) {
           cellsR[rIdx].style.boxShadow = "inset 0 0 0 3px var(--accent), 0 0 18px rgba(91,156,246,0.6)";
           setTimeout(() => { if (cellsR[rIdx]) cellsR[rIdx].style.boxShadow = ""; }, 600);
         }
-        trace.innerHTML = `${data.resultLabel}<sub>${i}${j}</sub> = <b>${sum.toFixed(2)}</b>`;
+        trace.innerHTML = `${data.resultLabel}<sub>${i}${j}</sub> = ${trace.dataset.expr || ""} = <b>${sum.toFixed(2)}</b>`;
         cellSum = sum; cellK = k;
         cb();
         return;
@@ -622,13 +635,16 @@ function liveProduct(body, data) {
       if (cellsB[bIdx]) { cellsB[bIdx].style.boxShadow = "inset 0 0 0 3px var(--good), 0 0 14px rgba(74,222,128,0.5)"; }
       const term = A[i][k] * B[k][j];
       sum += term;
-      const plus = k === 0 ? "" : " + ";
-      trace.innerHTML = `${data.resultLabel}<sub>${i}${j}</sub> = ${k === 0 ? "" : trace.innerHTML}${plus}${A[i][k].toFixed(2)}·${B[k][j].toFixed(2)}`;
-      info.textContent = `Шаг ${k+1}/${p}: ${A[i][k].toFixed(2)} × ${B[k][j].toFixed(2)} = ${term.toFixed(2)} (сумма: ${sum.toFixed(2)})`;
+      const expr = trace.dataset.expr || "";
+      const newExpr = expr + (k === 0 ? "" : " + ") + `${A[i][k].toFixed(2)}<sub>[${i}][${k}]</sub>·${B[k][j].toFixed(2)}<sub>[${k}][${j}]</sub>`;
+      trace.dataset.expr = newExpr;
+      trace.innerHTML = `${data.resultLabel}<sub>${i}${j}</sub> = ${newExpr}`;
+      info.textContent = `Шаг ${k+1}/${p}: ${data.leftLabel}[${i}][${k}]×${data.rightLabel}[${k}][${j}] = ${A[i][k].toFixed(2)} × ${B[k][j].toFixed(2)} = ${term.toFixed(2)} (сумма: ${sum.toFixed(2)})`;
       cellK = ++k; cellSum = sum;
       schedule(stepK, 500);
     }
     trace.innerHTML = "";
+    trace.dataset.expr = "";
     cellK = 0; cellSum = 0;
     stepK();
   }
@@ -762,7 +778,7 @@ function liveTriple(body, data) {
           unhighlight();
           const cellsR = hostR.querySelectorAll(".cell");
           if (cellsR[rIdx]) { cellsR[rIdx].style.boxShadow = "inset 0 0 0 3px var(--accent), 0 0 14px rgba(91,156,246,0.6)"; setTimeout(() => { if (cellsR[rIdx]) cellsR[rIdx].style.boxShadow = ""; }, 600); }
-          trace.innerHTML = `${hostLabel}<sub>${i}${j}</sub> = <b>${sum.toFixed(2)}</b>`;
+          trace.innerHTML = `${hostLabel}<sub>${i}${j}</sub> = ${trace.dataset.expr || ""} = <b>${sum.toFixed(2)}</b>`;
           cellSum = sum; cellK = k;
           cb();
           return;
@@ -772,13 +788,15 @@ function liveTriple(body, data) {
         if (cellsB[bIdx]) cellsB[bIdx].style.boxShadow = "inset 0 0 0 3px var(--good), 0 0 14px rgba(74,222,128,0.5)";
         const term = leftM[i][k] * rightM[k][j];
         sum += term;
-        const plus = k === 0 ? "" : " + ";
-        trace.innerHTML = `${hostLabel}<sub>${i}${j}</sub> = ${k === 0 ? "" : trace.innerHTML}${plus}${leftM[i][k].toFixed(2)}·${rightM[k][j].toFixed(2)}`;
-        info.textContent = `Шаг ${k+1}/${mid}: ${leftM[i][k].toFixed(2)} × ${rightM[k][j].toFixed(2)} = ${term.toFixed(2)} (сумма: ${sum.toFixed(2)})`;
+        const expr = trace.dataset.expr || "";
+        const newExpr = expr + (k === 0 ? "" : " + ") + `${leftM[i][k].toFixed(2)}<sub>[${i}][${k}]</sub>·${rightM[k][j].toFixed(2)}<sub>[${k}][${j}]</sub>`;
+        trace.dataset.expr = newExpr;
+        trace.innerHTML = `${hostLabel}<sub>${i}${j}</sub> = ${newExpr}`;
+        info.textContent = `Шаг ${k+1}/${mid}: [${i}][${k}]×[${k}][${j}] = ${leftM[i][k].toFixed(2)} × ${rightM[k][j].toFixed(2)} = ${term.toFixed(2)} (сумма: ${sum.toFixed(2)})`;
         cellK = ++k; cellSum = sum;
         schedule(stepK, 500);
       }
-      trace.innerHTML = ""; cellK = 0; cellSum = 0;
+      trace.innerHTML = ""; trace.dataset.expr = ""; cellK = 0; cellSum = 0;
       stepK();
     }
 
@@ -1527,35 +1545,50 @@ function liveNote(body, data) {
 }
 
 function livePseudoinverse(body, data) {
-  const { W, U: svdU, S, V: svdV, SigmaInv, Wpinv, scale: s } = data;
+  const { C, R, Cp, Rp, A, U } = data;
+  const r = C[0].length;
+  const m = C.length;
+  const n = R[0].length;
 
-  const wrap = document.createElement("div");
-  wrap.style.cssText = "display:flex;flex-direction:column;gap:0.6rem;font-size:0.78rem";
+  function matStr(M) {
+    return M.map(r => r.map(v => v.toFixed(3)).join(" ")).join(" | ");
+  }
 
-  function renderMiniMatrix(mat, label, val) {
+  function showMatrixTbl(parent, mat, label, highlight) {
     const block = document.createElement("div");
-    block.style.cssText = "text-align:center";
+    block.style.cssText = "text-align:center;opacity:0;transition:opacity 0.5s";
     const lbl = document.createElement("div");
-    lbl.style.cssText = "font-weight:600;margin-bottom:0.2rem;color:var(--text)";
+    lbl.style.cssText = "font-weight:600;font-size:0.75rem;margin-bottom:0.15rem;color:var(--accent)";
     lbl.textContent = label;
     block.appendChild(lbl);
     const tbl = document.createElement("table");
-    tbl.style.cssText = "border-collapse:collapse;margin:0 auto;font-size:0.72rem;font-family:monospace";
+    tbl.style.cssText = "border-collapse:collapse;margin:0 auto;font-size:0.68rem;font-family:monospace";
     for (let i = 0; i < mat.length; i++) {
       const tr = document.createElement("tr");
       for (let j = 0; j < mat[0].length; j++) {
         const td = document.createElement("td");
-        td.style.cssText = "padding:2px 6px;border:1px solid var(--border);text-align:right";
-        if (val) {
-          td.textContent = val[i] !== undefined ? val[i].toFixed(3) : mat[i][j].toFixed(3);
-        } else {
-          td.textContent = mat[i][j].toFixed(3);
-        }
-        block.appendChild(tbl);
+        const isHi = highlight && highlight[0] === i && highlight[1] === j;
+        td.style.cssText = "padding:1px 5px;border:1px solid var(--border);text-align:right" + (isHi ? ";background:rgba(74,222,128,0.15)" : "");
+        td.textContent = mat[i][j].toFixed(3);
+        tr.appendChild(td);
       }
+      tbl.appendChild(tr);
     }
-    return block;
+    block.appendChild(tbl);
+    parent.appendChild(block);
+    requestAnimationFrame(() => block.style.opacity = "1");
   }
+
+  function showFormula(parent, text) {
+    const el = document.createElement("div");
+    el.style.cssText = "text-align:center;font-size:0.72rem;font-family:monospace;opacity:0;transition:opacity 0.5s;margin:0.2rem 0";
+    el.textContent = text;
+    parent.appendChild(el);
+    requestAnimationFrame(() => el.style.opacity = "1");
+  }
+
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "display:flex;flex-direction:column;gap:0.6rem;font-size:0.78rem";
 
   const phaseDiv = document.createElement("div");
   phaseDiv.style.cssText = "font-size:0.8rem;color:var(--accent);font-weight:600;margin-bottom:0.3rem";
@@ -1617,106 +1650,97 @@ function livePseudoinverse(body, data) {
     return id;
   }
 
-  function renderSvdPhase() {
+  function renderCPinvPhase() {
     contentDiv.innerHTML = "";
-    phaseDiv.textContent = "Шаг 1: SVD разложение W = U·Σ·Vᵀ";
-    statusDiv.textContent = "Вычисляем сингулярное разложение матрицы W...";
+    phaseDiv.textContent = `Шаг 1: C⁺ = (CᵀC)⁻¹·Cᵀ (псевдообратная к C)`;
+    statusDiv.textContent = "Вычисляем псевдообразную C⁺...";
 
-    function showMatrix(mat, label, idx) {
-      const block = document.createElement("div");
-      block.style.cssText = "text-align:center;opacity:0;transition:opacity 0.5s";
-      const lbl = document.createElement("div");
-      lbl.style.cssText = "font-weight:600;font-size:0.75rem;margin-bottom:0.15rem;color:var(--accent)";
-      lbl.textContent = label;
-      block.appendChild(lbl);
-      const tbl = document.createElement("table");
-      tbl.style.cssText = "border-collapse:collapse;margin:0 auto;font-size:0.68rem;font-family:monospace";
-      for (let i = 0; i < mat.length; i++) {
-        const tr = document.createElement("tr");
-        const rows = Array.isArray(mat[0]) ? mat.length : 1;
-        const cols = Array.isArray(mat[0]) ? mat[0].length : mat.length;
-        for (let j = 0; j < cols; j++) {
-          const td = document.createElement("td");
-          td.style.cssText = "padding:1px 5px;border:1px solid var(--border);text-align:right";
-          const v = Array.isArray(mat[0]) ? mat[i][j] : (i === 0 ? mat[j] : 0);
-          td.textContent = v !== undefined ? v.toFixed(3) : "0";
-          tr.appendChild(td);
-        }
-      }
-      tbl.appendChild(tr);
-      block.appendChild(tbl);
-      contentDiv.appendChild(block);
-      requestAnimationFrame(() => block.style.opacity = "1");
-    }
+    const Ct = transpose(C);
+    const CtC = dot(Ct, C);
+    const scalarCase = r === 1;
 
-    schedule(() => showMatrix(W, "W", 0), 100);
-    schedule(() => showMatrix(svdU, "U", 1), 800);
     schedule(() => {
-      const sv = document.createElement("div");
-      sv.style.cssText = "text-align:center;opacity:0;transition:opacity 0.5s";
-      const slbl = document.createElement("div");
-      slbl.style.cssText = "font-weight:600;font-size:0.75rem;margin-bottom:0.15rem;color:var(--accent)";
-      slbl.textContent = "Σ = diag(" + S.map(s => s.toFixed(3)).join(", ") + ")";
-      sv.appendChild(slbl);
-      contentDiv.appendChild(sv);
-      requestAnimationFrame(() => sv.style.opacity = "1");
-      statusDiv.textContent = `Сингулярные числа: ${S.map(s => s.toFixed(3)).join(", ")}`;
+      showMatrixTbl(contentDiv, C, "C");
+      statusDiv.textContent = "Матрица C (выбранные столбцы)";
+    }, 100);
+
+    schedule(() => {
+      statusDiv.textContent = "Вычисляем CᵀC ...";
+      showFormula(contentDiv, `CᵀC = ${matStr(CtC)}`);
+    }, 800);
+
+    schedule(() => {
+      if (scalarCase) {
+        const val = CtC[0][0];
+        const inv = 1 / val;
+        showFormula(contentDiv, `(CᵀC)⁻¹ = 1 / ${val.toFixed(3)} = ${inv.toFixed(3)}`);
+        statusDiv.textContent = `CᵀC = ${val.toFixed(3)} → (CᵀC)⁻¹ = ${inv.toFixed(3)}`;
+      } else {
+        showFormula(contentDiv, "(CᵀC)⁻¹ — обратная матрица");
+        statusDiv.textContent = "(CᵀC)⁻¹ вычислена";
+      }
+      schedule(() => renderCRegistration(), 1200);
     }, 1600);
-    schedule(() => showMatrix(svdV, "Vᵀ", 2), 2400);
-    schedule(() => {
-      statusDiv.textContent = "Готово: W = U·Σ·Vᵀ";
-      schedule(() => renderSigmaInvPhase(), 600);
-    }, 3200);
+
+    function renderCRegistration() {
+      showMatrixTbl(contentDiv, Cp, "C⁺ = (CᵀC)⁻¹·Cᵀ", [0, 0]);
+      statusDiv.textContent = "C⁺ найдена!";
+      schedule(() => renderRPinvPhase(), 800);
+    }
   }
 
-  function renderSigmaInvPhase() {
+  function renderRPinvPhase() {
     contentDiv.innerHTML = "";
-    phaseDiv.textContent = "Шаг 2: Псевдообратная Σ⁺ = diag(1/σᵢ)";
-    statusDiv.textContent = "Вычисляем обратные сингулярных чисел...";
+    phaseDiv.textContent = `Шаг 2: R⁺ = Rᵀ·(R·Rᵀ)⁻¹ (псевдообратная к R)`;
+    statusDiv.textContent = "Вычисляем псевдообразную R⁺...";
+
+    const Rt = transpose(R);
+    const RRt = dot(R, Rt);
+    const scalarCase = r === 1;
 
     schedule(() => {
-      statusDiv.textContent = "σ > tol → 1/σ, иначе 0";
-    }, 300);
-
-    const block = document.createElement("div");
-    block.style.cssText = "text-align:center;opacity:0;transition:opacity 0.5s";
-    const lbl = document.createElement("div");
-    lbl.style.cssText = "font-weight:600;font-size:0.75rem;margin-bottom:0.15rem;color:var(--accent)";
-    lbl.textContent = "Σ⁺ = diag(1/σᵢ)";
-    block.appendChild(lbl);
-    contentDiv.appendChild(block);
+      showMatrixTbl(contentDiv, R, "R");
+      statusDiv.textContent = "Матрица R (выбранные строки)";
+    }, 100);
 
     schedule(() => {
-      for (let i = 0; i < S.length && i < W.length; i++) {
-        const row = document.createElement("div");
-        row.style.cssText = "font-size:0.7rem;font-family:monospace;margin:0.1rem 0";
-        const val = S[i] > 1e-10 ? 1 / S[i] : 0;
-        row.textContent = `σ₊[${i}] = 1/${S[i].toFixed(4)} = ${val.toFixed(4)}`;
-        block.appendChild(row);
+      statusDiv.textContent = "Вычисляем R·Rᵀ ...";
+      showFormula(contentDiv, `R·Rᵀ = ${matStr(RRt)}`);
+    }, 800);
+
+    schedule(() => {
+      if (scalarCase) {
+        const val = RRt[0][0];
+        const inv = 1 / val;
+        showFormula(contentDiv, `(R·Rᵀ)⁻¹ = 1 / ${val.toFixed(3)} = ${inv.toFixed(3)}`);
+        statusDiv.textContent = `R·Rᵀ = ${val.toFixed(3)} → (R·Rᵀ)⁻¹ = ${inv.toFixed(3)}`;
+      } else {
+        showFormula(contentDiv, "(R·Rᵀ)⁻¹ — обратная матрица");
+        statusDiv.textContent = "(R·Rᵀ)⁻¹ вычислена";
       }
-      requestAnimationFrame(() => block.style.opacity = "1");
-      statusDiv.textContent = "Вычислено!";
-      schedule(() => renderPinvPhase(), 1000);
-    }, 500);
+      schedule(() => renderRRegistration(), 1200);
+    }, 1600);
+
+    function renderRRegistration() {
+      showMatrixTbl(contentDiv, Rp, "R⁺ = Rᵀ·(R·Rᵀ)⁻¹", [0, 0]);
+      statusDiv.textContent = "R⁺ найдена!";
+      schedule(() => renderUPhase(), 800);
+    }
   }
 
-  function renderPinvPhase() {
+  function renderUPhase() {
     contentDiv.innerHTML = "";
-    phaseDiv.textContent = "Шаг 3: W⁺ = V·Σ⁺·Uᵀ";
-    statusDiv.textContent = "Перемножаем матрицы...";
-
-    const triple = document.createElement("div");
-    triple.style.cssText = "text-align:center;font-size:0.72rem;font-family:monospace;opacity:0;transition:opacity 0.5s;margin-bottom:0.4rem";
-    triple.textContent = "W⁺ = V · Σ⁺ · Uᵀ";
-    contentDiv.appendChild(triple);
+    phaseDiv.textContent = `Шаг 3: U = C⁺·A·R⁺ (связующая матрица)`;
+    statusDiv.textContent = "Перемножаем C⁺ · A · R⁺ ...";
 
     schedule(() => {
-      requestAnimationFrame(() => triple.style.opacity = "1");
-      statusDiv.textContent = "Промежуточный результат: V · Σ⁺";
+      showFormula(contentDiv, "U = C⁺ · A · R⁺");
+      statusDiv.textContent = "Промежуточный результат: C⁺ · A";
     }, 300);
 
     schedule(() => {
-      statusDiv.textContent = "Финальное умножение: (V·Σ⁺) · Uᵀ ...";
+      showFormula(contentDiv, "Финальное умножение: (C⁺·A) · R⁺");
+      statusDiv.textContent = "Вычисляем (C⁺·A) · R⁺ ...";
     }, 1200);
 
     schedule(() => {
@@ -1724,17 +1748,17 @@ function livePseudoinverse(body, data) {
       result.style.cssText = "text-align:center;opacity:0;transition:opacity 0.5s;margin-top:0.4rem";
       const rlbl = document.createElement("div");
       rlbl.style.cssText = "font-weight:600;font-size:0.78rem;margin-bottom:0.2rem;color:var(--good)";
-      rlbl.textContent = "W⁺ = ";
+      rlbl.textContent = "U = C⁺·A·R⁺ = ";
       result.appendChild(rlbl);
 
       const tbl = document.createElement("table");
       tbl.style.cssText = "border-collapse:collapse;margin:0 auto;font-size:0.68rem;font-family:monospace";
-      for (let i = 0; i < Wpinv.length; i++) {
+      for (let i = 0; i < U.length; i++) {
         const tr = document.createElement("tr");
-        for (let j = 0; j < Wpinv[0].length; j++) {
+        for (let j = 0; j < U[0].length; j++) {
           const td = document.createElement("td");
           td.style.cssText = "padding:1px 5px;border:1px solid var(--border);text-align:right;background:rgba(74,222,128,0.08)";
-          td.textContent = Wpinv[i][j].toFixed(3);
+          td.textContent = U[i][j].toFixed(3);
           tr.appendChild(td);
         }
         tbl.appendChild(tr);
@@ -1742,11 +1766,11 @@ function livePseudoinverse(body, data) {
       result.appendChild(tbl);
       contentDiv.appendChild(result);
       requestAnimationFrame(() => result.style.opacity = "1");
-      statusDiv.textContent = "Псевдообратная матрица W⁺ найдена!";
+      statusDiv.textContent = "Связующая матрица U = C⁺·A·R⁺ найдена!";
     }, 2000);
   }
 
-  renderSvdPhase();
+  renderCPinvPhase();
 }
 
 function liveErrorDetail(body, data) {
@@ -2341,7 +2365,7 @@ function renderRowColNorms(container, A) {
 
 // ── Presets ──
 
-function applyPreset(name, rows, cols) {
+function applyPreset(name, rows, cols, seed = 42) {
   switch (name) {
     case "identity": {
       const M = zeros(rows, cols);
@@ -2349,12 +2373,12 @@ function applyPreset(name, rows, cols) {
       return M;
     }
     case "zeros": return zeros(rows, cols);
-    case "random": return randomMatrix(rows, cols, 0, 10, Math.floor(Math.random() * 99999));
+    case "random": return randomMatrix(rows, cols, 0, 10, seed);
     case "example": return [
       [4, 3],
       [2, 1],
     ];
-    default: return randomMatrix(rows, cols, 0, 10, 42);
+    default: return randomMatrix(rows, cols, 0, 10, seed);
   }
 }
 
@@ -2367,110 +2391,10 @@ export function renderVisualizerPage(container, state) {
   const A = state.visA || clone(state.A) || [[4, 3], [2, 1]];
   const k = state.visK || Math.min(state.k || 2, A[0].length, A.length);
   const iters = state.visIters || state.iters || 20;
+  const visSeed = state.visSeed || 42;
 
   const layout = document.createElement("div");
   layout.className = "vis-layout";
-
-  // ── Controls bar ──
-  const controls = document.createElement("div");
-  controls.className = "vis-controls";
-
-  const leftCol = document.createElement("div");
-  leftCol.className = "vis-controls__left";
-
-  // Algorithm buttons
-  const algoGroup = document.createElement("div");
-  algoGroup.className = "vis-algo-group";
-  const algos = [
-    { id: "svd", label: "SVD" },
-    { id: "pca", label: "PCA" },
-    { id: "nmf", label: "NMF" },
-    { id: "cur", label: "CUR" },
-    { id: "als", label: "ALS" },
-  ];
-  for (const a of algos) {
-    const btn = document.createElement("button");
-    btn.className = `vis-algo-btn${algo === a.id ? " active" : ""}`;
-    btn.textContent = a.label;
-    btn.addEventListener("click", () => {
-      state.visAlgo = a.id;
-      renderVisualizerPage(container, state);
-    });
-    algoGroup.appendChild(btn);
-  }
-  leftCol.appendChild(algoGroup);
-
-  // Preset buttons
-  const presetGroup = document.createElement("div");
-  presetGroup.className = "vis-preset-group";
-  const presets = [
-    { id: "identity", label: "Единичная" },
-    { id: "zeros", label: "Нулевая" },
-    { id: "random", label: "Случайная" },
-    { id: "example", label: "Пример" },
-  ];
-  for (const p of presets) {
-    const btn = document.createElement("button");
-    btn.className = "vis-preset-btn";
-    btn.textContent = p.label;
-    btn.addEventListener("click", () => {
-      const { m, n } = dims(state.visA || state.A);
-      state.visA = applyPreset(p.id, m, n);
-      renderVisualizerPage(container, state);
-    });
-    presetGroup.appendChild(btn);
-  }
-  leftCol.appendChild(presetGroup);
-
-  // Rank control
-  const rankGroup = document.createElement("div");
-  rankGroup.className = "vis-rank-group";
-  const rankLabel = document.createElement("span");
-  rankLabel.textContent = "Ранг k:";
-  const rankInput = document.createElement("input");
-  rankInput.type = "number";
-  rankInput.min = 1;
-  rankInput.max = Math.min(A.length, A[0].length, 10);
-  rankInput.value = k;
-  rankInput.className = "vis-rank-input";
-  rankInput.addEventListener("change", () => {
-    state.visK = Math.max(1, Math.min(Number(rankInput.value) || 1, Math.min(A.length, A[0].length, 10)));
-    renderVisualizerPage(container, state);
-  });
-  rankGroup.appendChild(rankLabel);
-  rankGroup.appendChild(rankInput);
-  leftCol.appendChild(rankGroup);
-
-  // Iterations control (for NMF, ALS)
-  const iterGroup = document.createElement("div");
-  iterGroup.className = "vis-rank-group";
-  const iterLabel = document.createElement("span");
-  iterLabel.textContent = "Итерации:";
-  const iterInput = document.createElement("input");
-  iterInput.type = "number";
-  iterInput.min = 1;
-  iterInput.max = 50;
-  iterInput.value = iters;
-  iterInput.className = "vis-rank-input";
-  iterInput.style.width = "55px";
-  iterInput.addEventListener("change", () => {
-    state.visIters = Math.max(1, Math.min(50, Number(iterInput.value) || 20));
-    renderVisualizerPage(container, state);
-  });
-  iterGroup.appendChild(iterLabel);
-  iterGroup.appendChild(iterInput);
-  if (algo !== "nmf" && algo !== "als") iterGroup.style.display = "none";
-  leftCol.appendChild(iterGroup);
-
-  controls.appendChild(leftCol);
-
-  // Row/Col norms
-  const normsContainer = document.createElement("div");
-  normsContainer.className = "vis-norms-container";
-  renderRowColNorms(normsContainer, A);
-  controls.appendChild(normsContainer);
-
-  layout.appendChild(controls);
 
   // ── Arrow color legend ──
   const legendBar = document.createElement("div");
@@ -2512,6 +2436,10 @@ export function renderVisualizerPage(container, state) {
   const editorHead = document.createElement("div");
   editorHead.className = "card__head";
   editorHead.innerHTML = `<h2>Матрица A</h2><div class="sub">клик → выбор, колёсико ±0.1 (Shift ±1)</div>`;
+  const normsMini = document.createElement("div");
+  normsMini.style.cssText = "margin-left:auto;display:flex;align-self:center";
+  renderRowColNorms(normsMini, A);
+  editorHead.appendChild(normsMini);
   editorCard.appendChild(editorHead);
 
   // Viridis color scale bar
@@ -2582,6 +2510,125 @@ export function renderVisualizerPage(container, state) {
   pipeHead.className = "card__head";
   pipeHead.innerHTML = `<h2>Визуальный процесс: ${algo.toUpperCase()}</h2><div class="sub">пошаговое разложение с анимацией</div>`;
   pipelineWrap.appendChild(pipeHead);
+
+  // Pipeline inline bar: methods | presets | settings
+  const pipeBar = document.createElement("div");
+  pipeBar.className = "vis-pipeline-bar";
+
+  // Section 1: Methods
+  const pipeSection1 = document.createElement("div");
+  pipeSection1.className = "vis-pipe-section";
+  const algoGroup = document.createElement("div");
+  algoGroup.className = "vis-algo-group";
+  const algos = [
+    { id: "svd", label: "SVD" },
+    { id: "pca", label: "PCA" },
+    { id: "nmf", label: "NMF" },
+    { id: "cur", label: "CUR" },
+    { id: "als", label: "ALS" },
+  ];
+  for (const a of algos) {
+    const btn = document.createElement("button");
+    btn.className = `vis-algo-btn${algo === a.id ? " active" : ""}`;
+    btn.textContent = a.label;
+    btn.addEventListener("click", () => {
+      state.visAlgo = a.id;
+      renderVisualizerPage(container, state);
+    });
+    algoGroup.appendChild(btn);
+  }
+  pipeSection1.appendChild(algoGroup);
+  pipeBar.appendChild(pipeSection1);
+
+  // Section 2: Presets
+  const pipeSection2 = document.createElement("div");
+  pipeSection2.className = "vis-pipe-section";
+  const presetGroup = document.createElement("div");
+  presetGroup.className = "vis-preset-group";
+  const presets = [
+    { id: "identity", label: "Единичная" },
+    { id: "zeros", label: "Нулевая" },
+    { id: "random", label: "Случайная" },
+    { id: "example", label: "Пример" },
+  ];
+  for (const p of presets) {
+    const btn = document.createElement("button");
+    btn.className = "vis-preset-btn";
+    btn.textContent = p.label;
+    btn.addEventListener("click", () => {
+      const { m, n } = dims(state.visA || state.A);
+      state.visA = applyPreset(p.id, m, n, visSeed);
+      renderVisualizerPage(container, state);
+    });
+    presetGroup.appendChild(btn);
+  }
+  pipeSection2.appendChild(presetGroup);
+  pipeBar.appendChild(pipeSection2);
+
+  // Section 3: Settings (rank, iters, seed)
+  const pipeSection3 = document.createElement("div");
+  pipeSection3.className = "vis-pipe-section vis-pipe-settings";
+
+  const rankGroup = document.createElement("div");
+  rankGroup.className = "vis-inline-group";
+  const rankLabel = document.createElement("span");
+  rankLabel.textContent = "Ранг k:";
+  const rankInput = document.createElement("input");
+  rankInput.type = "number";
+  rankInput.min = 1;
+  rankInput.max = Math.min(A.length, A[0].length, 10);
+  rankInput.value = k;
+  rankInput.className = "vis-rank-input";
+  rankInput.addEventListener("change", () => {
+    state.visK = Math.max(1, Math.min(Number(rankInput.value) || 1, Math.min(A.length, A[0].length, 10)));
+    renderVisualizerPage(container, state);
+  });
+  rankGroup.appendChild(rankLabel);
+  rankGroup.appendChild(rankInput);
+  pipeSection3.appendChild(rankGroup);
+
+  const iterGroup = document.createElement("div");
+  iterGroup.className = "vis-inline-group";
+  const iterLabel = document.createElement("span");
+  iterLabel.textContent = "Итерации:";
+  const iterInput = document.createElement("input");
+  iterInput.type = "number";
+  iterInput.min = 1;
+  iterInput.max = 50;
+  iterInput.value = iters;
+  iterInput.className = "vis-rank-input";
+  iterInput.style.width = "60px";
+  iterInput.addEventListener("change", () => {
+    state.visIters = Math.max(1, Math.min(50, Number(iterInput.value) || 20));
+    renderVisualizerPage(container, state);
+  });
+  iterGroup.appendChild(iterLabel);
+  iterGroup.appendChild(iterInput);
+  if (algo !== "nmf" && algo !== "als") iterGroup.style.display = "none";
+  pipeSection3.appendChild(iterGroup);
+
+  const seedGroup = document.createElement("div");
+  seedGroup.className = "vis-inline-group";
+  const seedLabel = document.createElement("span");
+  seedLabel.textContent = "Seed:";
+  const seedInput = document.createElement("input");
+  seedInput.type = "number";
+  seedInput.min = 0;
+  seedInput.max = 999999;
+  seedInput.value = visSeed;
+  seedInput.className = "vis-rank-input";
+  seedInput.style.width = "75px";
+  seedInput.addEventListener("change", () => {
+    state.visSeed = Math.max(0, Math.floor(Number(seedInput.value) || 0));
+    renderVisualizerPage(container, state);
+  });
+  seedGroup.appendChild(seedLabel);
+  seedGroup.appendChild(seedInput);
+  pipeSection3.appendChild(seedGroup);
+
+  pipeBar.appendChild(pipeSection3);
+
+  pipelineWrap.appendChild(pipeBar);
 
   const pipeContainer = document.createElement("div");
   pipeContainer.className = "vis-pipeline";

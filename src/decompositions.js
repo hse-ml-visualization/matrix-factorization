@@ -62,12 +62,19 @@ function diffMat(A, B) {
 }
 
 export function svdTruncated(A, k) {
-  const { U, S, V } = numeric.svd(A);
   const { m, n } = dims(A);
+  const needTranspose = m < n;
+  const X = needTranspose ? transpose(A) : A;
+  const { U, S, V } = numeric.svd(X);
   const r = Math.max(1, Math.min(k, S.length, U[0].length, V.length, m, n));
-  const Uk = takeUk(U, r);
-  const Sk = S.slice(0, r);
-  const Vk = takeVk(V, r);
+  let Uk = takeUk(U, r);
+  let Sk = S.slice(0, r);
+  let Vk = takeVk(V, r);
+  if (needTranspose) {
+    const tmp = Uk;
+    Uk = Vk;
+    Vk = tmp;
+  }
   const US = dot(Uk, diag(Sk));
   const Ahat = dot(US, transpose(Vk));
   return { Ahat, U, S, V, r, Uk, Sk, Vk, US };
@@ -182,10 +189,11 @@ export function nmfReconstructHistory(A, k, totalIters = 80, captureHistory = tr
   };
 }
 
-function pinv(A) {
-  const { U, S, V } = numeric.svd(A);
+export function pinv(A) {
   const m = A.length;
   const n = A[0].length;
+  if (m < n) return transpose(pinv(transpose(A)));
+  const { U, S, V } = numeric.svd(A);
   const r = Math.min(S.length, U[0].length, V.length);
   const tol = 1e-10 * Math.max(...S);
   const Sinv = zeros(r, r);
@@ -214,9 +222,11 @@ export function curReconstruct(A, k) {
   for (let t = 0; t < r; t++) for (let j = 0; j < n; j++) R[t][j] = A[topRows[t]][j];
   for (let i = 0; i < r; i++) for (let j = 0; j < r; j++) Wcore[i][j] = A[topRows[i]][topCols[j]];
 
-  const Uc = pinv(Wcore);
+  const Cp = pinv(C);
+  const Rp = pinv(R);
+  const Uc = dot(dot(Cp, A), Rp);
   const Ahat = dot(dot(C, Uc), R);
-  return { Ahat, C, U: Uc, R, Wcore, topRows, topCols, r };
+  return { Ahat, C, U: Uc, R, Wcore, topRows, topCols, r, Cp, Rp };
 }
 
 export function alsReconstruct(A, k, iters = 80, reg = 1e-2) {

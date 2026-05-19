@@ -98,8 +98,8 @@ export function meanAbsInMask(A, B, mask, inside) {
   for (let i = 0; i < m; i++) {
     for (let j = 0; j < n; j++) {
       if ((mask[i][j] && inside) || (!mask[i][j] && !inside)) {
-        s += Math.abs(A[i][j] - B[i][j]);
-        c++;
+        const d = A[i][j] - B[i][j];
+        if (Number.isFinite(d)) { s += Math.abs(d); c++; }
       }
     }
   }

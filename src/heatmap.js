@@ -38,7 +38,7 @@ export function renderLegend(host, kinds) {
 }
 
 export function renderMatrixBlock(parent, title, A, options = {}) {
-  const { subtitle, selected, badge, onCellClick, diverge = false, scale, onDblClick } = options;
+  const { subtitle, selected, badge, onCellClick, diverge = false, scale, onDblClick, onCellCreate } = options;
   const { mn, mx } = scale || minMax(A);
   const m = A.length;
   const n = A[0].length;
@@ -106,6 +106,8 @@ export function renderMatrixBlock(parent, title, A, options = {}) {
           startEdit(cell, originalV, (newVal) => onDblClick(i, j, newVal));
         });
       }
+
+      if (onCellCreate) onCellCreate(cell, i, j);
 
       grid.appendChild(cell);
     }

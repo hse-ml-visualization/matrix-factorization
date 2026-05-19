@@ -1,7 +1,7 @@
 /* global numeric */
 
 import { clear, readChecked, readNumber, latexToHtml, renderAccordion, renderConvergenceChart, renderSigmaChart, renderIterationSlider } from "./dom.js";
-import { dims, diff, minMax, absMean, frobNorm, randomMatrix, transpose, dot as dotM, diag } from "./matrix.js";
+import { dims, diff, minMax, absMean, frobNorm, randomMatrix, transpose, dot as dotM, diag, zeros, clone } from "./matrix.js";
 import { renderLegend, renderMatrixBlock } from "./heatmap.js";
 import { svdTruncated, pcaReconstruct, pcaReconstructWithSteps, nmfReconstruct, nmfReconstructHistory, curReconstruct, alsReconstruct, alsReconstructHistory } from "./decompositions.js";
 import { renderCenterEdgeExperiment, renderPerturbation } from "./experiments.js";
@@ -28,6 +28,7 @@ const state = {
   visA: null,
   visK: 2,
   visIters: 20,
+  visSeed: 42,
 };
 
 function ensureNumeric() {
@@ -96,6 +97,63 @@ function setupTabs() {
 
 function renderTabExp() {
   clear(panelExp);
+
+  // Presets card (shared settings: presets, seed, rank)
+  const card0 = document.createElement("div");
+  card0.className = "card";
+  card0.innerHTML = `<div class="card__head"><h2>Пресеты</h2><div class="sub">эталонная матрица, сид и ранг для экспериментов</div></div>`;
+  const host0 = document.createElement("div");
+  host0.style.cssText = "display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-top:0.2rem";
+  const presets = [
+    { id: "identity", label: "Единичная", fn: () => { const s = 4; const M = zeros(s, s); for (let i = 0; i < s; i++) M[i][i] = 1; return M; } },
+    { id: "zeros", label: "Нулевая", fn: () => zeros(4, 4) },
+    { id: "random", label: "Случайная", fn: () => randomMatrix(4, 4, 0, 10, state.seed) },
+    { id: "example", label: "Пример", fn: () => [[4, 3], [2, 1]] },
+  ];
+  for (const p of presets) {
+    const btn = document.createElement("button");
+    btn.className = "vis-preset-btn";
+    btn.textContent = p.label;
+    btn.addEventListener("click", () => {
+      state.A = p.fn();
+      renderTabExp();
+    });
+    host0.appendChild(btn);
+  }
+  host0.appendChild(document.createTextNode("\u00a0\u2022\u00a0"));
+  const seedLabel = document.createElement("span");
+  seedLabel.style.cssText = "font-size:0.78rem;color:var(--muted)";
+  seedLabel.textContent = "Seed:";
+  const seedInput = document.createElement("input");
+  seedInput.type = "number";
+  seedInput.min = 0;
+  seedInput.max = 999999;
+  seedInput.value = state.seed;
+  seedInput.style.cssText = "width:70px;padding:0.2rem 0.4rem;font-size:0.8rem;background:rgba(0,0,0,0.25);border:1px solid var(--border2);color:var(--text);border-radius:6px;outline:none";
+  seedInput.addEventListener("change", () => {
+    state.seed = Math.max(0, Math.floor(Number(seedInput.value) || 0));
+    renderTabExp();
+  });
+  host0.appendChild(seedLabel);
+  host0.appendChild(seedInput);
+  host0.appendChild(document.createTextNode("\u00a0\u00a0"));
+  const rankLabel = document.createElement("span");
+  rankLabel.style.cssText = "font-size:0.78rem;color:var(--muted)";
+  rankLabel.textContent = "Ранг k:";
+  const rankInput = document.createElement("input");
+  rankInput.type = "number";
+  rankInput.min = 1;
+  rankInput.max = 8;
+  rankInput.value = state.k;
+  rankInput.style.cssText = "width:60px;padding:0.2rem 0.4rem;font-size:0.8rem;background:rgba(0,0,0,0.25);border:1px solid var(--border2);color:var(--text);border-radius:6px;outline:none";
+  rankInput.addEventListener("change", () => {
+    state.k = Math.max(1, Math.min(8, Math.floor(Number(rankInput.value) || 1)));
+    renderTabExp();
+  });
+  host0.appendChild(rankLabel);
+  host0.appendChild(rankInput);
+  card0.appendChild(host0);
+  panelExp.appendChild(card0);
 
   const card1 = document.createElement("div");
   card1.className = "card";

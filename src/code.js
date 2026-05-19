@@ -183,8 +183,8 @@ codeBlocks.cur = {
   title: "4. CUR — разложение по строкам и столбцам",
   badge: "выбор + псевдообратная",
   desc: `Выбирает k самых «важных» столбцов (C) и k самых «важных» строк (R)
-    по евклидовой норме, строит связующую матрицу <code>U ≈ W<sup>+</sup></code>
-    (псевдообратная к пересечению C и R). Итог: <code>A ≈ C·U·R</code>.
+    по евклидовой норме, вычисляет связующую матрицу <code>U = C<sup>+</sup>·A·R<sup>+</sup></code>
+    (через псевдообратные C<sup>+</sup> и R<sup>+</sup>). Итог: <code>A ≈ C·U·R</code>.
     <strong>Где используется:</strong> разреженные данные, интерпретируемые признаки.`,
   example: "Матрица 10⁶×10⁵ покупок. CUR выбирает 20 реальных товаров и 20 реальных покупателей — интерпретируемое приближение (в отличие от SVD, где U/V — абстракции).",
   js: `// CUR — выбор столбцов и строк по норме
@@ -216,12 +216,15 @@ export function curReconstruct(A, k) {
   for (let i = 0; i < r; i++)
     for (let j = 0; j < r; j++) Wcore[i][j] = A[topRows[i]][topCols[j]];
 
-  // U = W⁺ — псевдообратная через SVD (малая r×r)
-  const Uc = pinv(Wcore);
+  // C⁺ и R⁺ — псевдообратные через SVD
+  const Cp = pinv(C);
+  const Rp = pinv(R);
+  // U = C⁺ · A · R⁺ — связующая матрица
+  const Uc = dot(dot(Cp, A), Rp);
 
   // Ã = C · U · R
   const Ahat = dot(dot(C, Uc), R);
-  return { Ahat, C, U: Uc, R, Wcore, topRows, topCols, r };
+  return { Ahat, C, U: Uc, R, Wcore, topRows, topCols, r, Cp, Rp };
 }`,
   py: `# CUR — выбор по норме + псевдообратная
 import numpy as np
@@ -243,8 +246,11 @@ def cur_reconstruct(A, k):
     R = A[top_rows, :]               # r×n
     Wcore = A[top_rows[:, None], top_cols]  # r×r
 
-    # U = псевдообратная к W (через SVD)
-    Uc = np.linalg.pinv(Wcore)       # r×r
+    # C⁺ и R⁺ — псевдообратные
+    Cp = np.linalg.pinv(C)           # r×m
+    Rp = np.linalg.pinv(R)           # n×r
+    # U = C⁺ · A · R⁺ — связующая матрица
+    Uc = Cp @ A @ Rp                 # r×r
 
     # Ã = C · U · R
     Ahat = C @ Uc @ R

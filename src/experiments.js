@@ -123,7 +123,7 @@ export function renderPerturbation(container, state) {
   clear(container);
 
   const desc = el("p", { className: "muted", style: "margin-bottom:0.7rem; max-width:72ch" });
-  desc.innerHTML = `Возмущение ${tex("\\Delta")} в одной ячейке ${tex("A")} — как оно распространяется на ${tex("\\tilde A")}`;
+  desc.innerHTML = `Возмущение ${tex("\\Delta")} в ячейке — крутите колёсико на ячейке ${tex("A")}, ${tex("\\Delta")} меняется, эффект виден на ${tex("\\tilde A")}`;
   container.appendChild(desc);
 
   let p = { baseA: null, sel: [0, 0], delta: 0, size: { m: 6, n: 6 } };
@@ -135,40 +135,21 @@ export function renderPerturbation(container, state) {
   ]);
   container.appendChild(sizeControls);
 
-  const deltaRow = el("div", { className: "controls", style: "flex-direction:column; gap:0.4rem" }, [
-    el("label", {}, [
-      el("span", { html: `Δ — ${tex("\\Delta")} в ячейке` }),
-      el("input", { id: "pert-delta", type: "range", min: "-5", max: "5", step: "0.05", value: "0" }),
-    ]),
-    el("div", { style: "display:flex; gap:0.5rem; align-items:center" }, [
-      el("span", { className: "muted", text: "Значение \u0394:" }),
-      el("input", { id: "pert-delta-val", type: "text", value: "0.00", style: "width:90px" }),
-    ]),
-  ]);
-  container.appendChild(deltaRow);
-
   const btnRow = el("div", { className: "controls" }, [
     el("button", { text: "\u041D\u043E\u0432\u0430\u044F A", onClick: newBase }),
-    el("button", { text: "\u0421\u0431\u0440\u043E\u0441\u0438\u0442\u044C \u0394=0", onClick: resetDelta }),
+    el("button", { text: "\u0421\u0431\u0440\u043E\u0441\u0438\u0442\u044C \u0394=0", onClick: () => { p.delta = 0; redraw(); } }),
   ]);
   container.appendChild(btnRow);
+
+  const deltaInfo = el("div", { className: "muted", style: "font-size:0.82rem; margin:0.3rem 0" });
+  container.appendChild(deltaInfo);
+
+  const deltaBadge = el("div", { style: "font-size:1.6rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.02em; margin:0.4rem 0 0.2rem; color:var(--accent)" });
+  container.appendChild(deltaBadge);
 
   const view = el("div", {});
   container.appendChild(view);
 
-  document.getElementById("pert-delta").addEventListener("input", (e) => {
-    p.delta = Number(e.target.value);
-    document.getElementById("pert-delta-val").value = p.delta.toFixed(2);
-    redraw();
-  });
-  document.getElementById("pert-delta-val").addEventListener("change", (e) => {
-    const v = Number(e.target.value);
-    if (Number.isFinite(v)) {
-      p.delta = v;
-      document.getElementById("pert-delta").value = String(v);
-      redraw();
-    }
-  });
   for (const id of ["pert-m", "pert-n"]) {
     document.getElementById(id).addEventListener("change", () => {
       p.size.m = Number(document.getElementById("pert-m").value) || 6;
@@ -176,6 +157,7 @@ export function renderPerturbation(container, state) {
       const [lo, hi] = state.range;
       p.baseA = randomMatrix(p.size.m, p.size.n, lo, hi, state.seed);
       p.sel = [0, 0];
+      p.delta = 0;
       redraw();
     });
   }
@@ -184,14 +166,19 @@ export function renderPerturbation(container, state) {
     const [lo, hi] = state.range;
     p.baseA = randomMatrix(p.size.m, p.size.n, lo, hi, state.seed);
     p.sel = [0, 0];
+    p.delta = 0;
     redraw();
   }
 
-  function resetDelta() {
-    p.delta = 0;
-    document.getElementById("pert-delta").value = "0";
-    document.getElementById("pert-delta-val").value = "0.00";
-    redraw();
+  function makeWheelEditable(cellEl, i, j) {
+    cellEl.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      p.sel = [i, j];
+      const dir = e.deltaY < 0 ? 0.1 : -0.1;
+      const step = e.shiftKey ? 1 : 0.1;
+      p.delta = Math.round((p.delta + dir * step) * 100) / 100;
+      redraw();
+    }, { passive: false });
   }
 
   function redraw() {
@@ -205,6 +192,9 @@ export function renderPerturbation(container, state) {
       return;
     }
 
+    deltaBadge.innerHTML = `${tex("\\Delta")} = ${p.delta > 0 ? "+" : ""}${p.delta.toFixed(2)}`;
+    deltaInfo.innerHTML = `${tex("\\Delta")} = ${p.delta.toFixed(2)} в ячейке [${p.sel[0]}][${p.sel[1]}] ${tex("\\to")} A' = A с ${tex("\\Delta")} в этой ячейке`;
+
     renderLegend(view, ["sequential", "diverging"]);
 
     const row0 = el("div", { className: "matrix-row" });
@@ -215,8 +205,9 @@ export function renderPerturbation(container, state) {
         p.sel = [i, j];
         redraw();
       },
+      onCellCreate: makeWheelEditable,
     });
-    renderMatrixBlock(row0, `A' = A + ${p.delta.toFixed(2)}`, Aprime, {
+    renderMatrixBlock(row0, `A' = A`, Aprime, {
       badge: p.sel,
     });
     view.appendChild(row0);
