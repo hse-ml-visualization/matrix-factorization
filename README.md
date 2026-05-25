@@ -48,9 +48,9 @@ C4Context
 
 ## Структура проекта
 
-```
+
 ### 2. Container Diagram
-```mermaid
+
 C4Container
     title Container Diagram - Matrix Lab
 
@@ -71,7 +71,7 @@ C4Container
     Rel(backend, browser, "Возвращает результаты", "JSON")
     Rel(browser, js_core, "Выполняет лёгкие расчёты", "JavaScript")
 ```
-
+```
 matrix-factorization/
 |
 |-- assets/                    # Статические библиотеки и файлы
