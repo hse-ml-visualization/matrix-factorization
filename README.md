@@ -45,12 +45,12 @@ C4Context
 
     Rel(student, web_app, "Использует для интерактивного изучения", "HTTPS")
     Rel(student, notebook, "Использует для исследований", "Локально")
-
+```
 ## Структура проекта
 
 
 ### 2. Container Diagram
-
+```mermaid
 C4Container
     title Container Diagram - Matrix Lab
 
@@ -137,10 +137,10 @@ python3 -m http.server 8080
 
 ## Технологии
 
-Frontend: чистый JavaScript (ES6)
-Backend: Flask + Python
-Математика: numeric.js (клиент) + NumPy (сервер)
-Формулы: KaTeX
-Визуализация: тепловые карты на CSS Grid
+- Frontend: чистый JavaScript (ES6)
+- Backend: Flask + Python
+- Математика: numeric.js (клиент) + NumPy (сервер)
+- Формулы: KaTeX
+- Визуализация: тепловые карты на CSS Grid
 
 ## Автор: Кибанова Екатерина Николаевна
