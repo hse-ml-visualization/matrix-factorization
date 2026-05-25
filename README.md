@@ -90,6 +90,8 @@ matrix-factorization/
 |-- code.html                  # Страница с кодом и теорией
 |-- README.md                  # Документация проекта
 |-- .gitignore
+|-- requirements.txt
+|-- LICENSE
 ```
 
 ## Как запустить локально
