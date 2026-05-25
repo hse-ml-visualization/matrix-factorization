@@ -2,6 +2,10 @@
 
 Интерактивная лаборатория для изучения матричных разложений. Курсовой проект
 
+![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
+![JavaScript](https://img.shields.io/badge/JavaScript-ES6-yellow)
+
 ## О проекте
 
 Matrix Lab - веб-приложение для визуального и математического исследования матричных разложений. Создано как инструмент для изучения линейной алгебры: позволяет экспериментировать с матрицами, наблюдать работу алгоритмов в динамике и понимать математическую основу каждого разложения.
@@ -34,43 +38,27 @@ Matrix Lab - веб-приложение для визуального и мат
 
 ```mermaid
 C4Context
-    title System Context Diagram - Matrix Lab
-
-    Person(student, "Студент / Пользователь", "Первокурсник или исследователь")
-
+    Person(student, "Студент", "Пользователь")
+    
     System_Boundary(matrixlab, "Matrix Lab") {
-        System(web_app, "Веб-приложение", "Интерактивная визуализация и калькулятор")
-        System(notebook, "Jupyter Notebook", "Глубокий анализ и эксперименты")
+        System(webapp, "Веб-приложение", "SPA + Flask API")
     }
-
-    Rel(student, web_app, "Использует для интерактивного изучения", "HTTPS")
-    Rel(student, notebook, "Использует для исследований", "Локально")
+    Rel(student, webapp, "Использует", "HTTPS")
 ```
-## Структура проекта
-
 
 ### 2. Container Diagram
 ```mermaid
 C4Container
-    title Container Diagram - Matrix Lab
-
-    Person(student, "Пользователь", "Студент")
-
+    Person(student, "Студент")
     System_Boundary(matrixlab, "Matrix Lab") {
-        Container(browser, "Веб-браузер", "HTML5, CSS3, JavaScript", "Клиентская часть")
-        
-        Container_Boundary(server_side, "Серверная часть") {
-            Container(backend, "Backend", "Python + Flask", "Обработка запросов и тяжёлые вычисления")
-        }
-        
-        Container(js_core, "JavaScript Core", "numeric.js + custom modules", "Клиентские реализации алгоритмов")
+        Container(spa, "Single-Page Application", "HTML, JS, CSS", "Интерактивный UI в браузере")
+        Container(api, "Flask API Server", "Python, NumPy", "Пошаговые расчёты на сервере")
     }
-
-    Rel(student, browser, "Открывает и взаимодействует", "HTTPS")
-    Rel(browser, backend, "Отправляет данные для расчёта", "JSON / HTTP POST")
-    Rel(backend, browser, "Возвращает результаты", "JSON")
-    Rel(browser, js_core, "Выполняет лёгкие расчёты", "JavaScript")
+    
+    Rel(student, spa, "Открывает в браузере", "HTTPS")
+    Rel(spa, api, "POST /api/decompose", "JSON/HTTP")
 ```
+## Структура проекта
 ```
 matrix-factorization/
 |
@@ -109,7 +97,6 @@ matrix-factorization/
 ### Вариант 1 (быстрый) - только фронтенд:
 
 ```bash
-cd matrix-lab
 python3 -m http.server 8080
 ```
 
