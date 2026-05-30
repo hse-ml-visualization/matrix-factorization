@@ -1,5 +1,6 @@
 import { clamp } from "./rng.js";
 
+// Цветовая схема viridis: t∈[0,1] → {r,g,b} (интерполяция 5 опорных точек)
 export function viridis(t) {
   const c = [
     [68, 1, 84],
@@ -19,6 +20,7 @@ export function viridis(t) {
   return { r, g, b: bl };
 }
 
+// Diverging-схема: синий (<0) → нейтральный → красный (>0), масштаб vmax
 export function diverging(v, vmax) {
   const t = vmax < 1e-12 ? 0 : clamp(v / vmax, -1, 1);
   // blue -> neutral -> red
@@ -43,6 +45,7 @@ export function diverging(v, vmax) {
   };
 }
 
+// {r,g,b} → "rgb(r,g,b)"
 export function rgb({ r, g, b }) {
   return `rgb(${r},${g},${b})`;
 }

@@ -1,3 +1,4 @@
+// Универсальный конструктор DOM-элементов с атрибутами и дочерними узлами
 export function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -11,19 +12,23 @@ export function el(tag, attrs = {}, children = []) {
   return node;
 }
 
+// Очищает innerHTML контейнера
 export function clear(node) {
   if (node) node.innerHTML = "";
 }
 
+// Читает число из input по id, при невалидном числе — fallback
 export function readNumber(id, fallback) {
   const v = Number(document.getElementById(id)?.value);
   return Number.isFinite(v) ? v : fallback;
 }
 
+// Читает checked из checkbox по id
 export function readChecked(id) {
   return Boolean(document.getElementById(id)?.checked);
 }
 
+// Рендерит LaTeX-строку через KaTeX (displayMode по умолчанию false)
 export function latexToHtml(str, display = false) {
   try {
     return window.katex.renderToString(str, { displayMode: display, throwOnError: false, trust: true });
@@ -32,10 +37,12 @@ export function latexToHtml(str, display = false) {
   }
 }
 
+// Алиас для latexToHtml
 export function katex(str, display = false) {
   return latexToHtml(str, display);
 }
 
+// Аккордеон с раскрывающимися секциями
 export function renderAccordion(container, items) {
   for (const item of items) {
     const itemEl = el("div", { className: "accordion__item" });
@@ -66,6 +73,7 @@ export function renderAccordion(container, items) {
   }
 }
 
+// График сходимости frob-ошибки по итерациям
 export function renderConvergenceChart(container, history) {
   if (!history || history.length < 2) return;
 
@@ -108,46 +116,42 @@ export function renderConvergenceChart(container, history) {
   return barEls;
 }
 
+// Столбчатая диаграмма сингулярных чисел
 export function renderSigmaChart(container, Sk, r) {
   if (!Sk || !Sk.length) return;
 
   const wrap = el("div", { className: "sigma-chart" });
 
-  for (let idx = 0; idx < Math.min(Sk.length, r); idx++) {
-    const v = Sk[idx];
-    const barWrap = el("div", { className: "sigma-row" });
+  const svgNS = "http://www.w3.org/2000/svg";
+  const W = 360, H = 120, pad = { top: 8, bottom: 24, left: 8, right: 8 };
+  const chartW = W - pad.left - pad.right, chartH = H - pad.top - pad.bottom;
+  const maxS = Math.max(...Sk, 1e-12);
+  const barW = Math.max(2, chartW / Sk.length - 1);
 
-    const label = el("span", { className: "sigma-row__label" });
-    label.innerHTML = latexToHtml(`\\sigma_{${idx + 1}}`);
-
-    const barOuter = el("div", { className: "sigma-row__bar-wrap", style: "position:relative" });
-    const bar = el("div", { className: "sigma-row__bar" });
-    bar.style.width = "0%";
-    bar.style.width = ((v / Sk[0]) * 100).toFixed(1) + "%";
-
-    const tooltip = el("span", { className: "sigma-tooltip" });
-    tooltip.textContent = v.toFixed(4);
-    tooltip.style.position = "absolute";
-    tooltip.style.left = "100%";
-    tooltip.style.marginLeft = "6px";
-    tooltip.style.top = "50%";
-    tooltip.style.transform = "translateY(-50%)";
-
-    barOuter.appendChild(bar);
-    barOuter.appendChild(tooltip);
-
-    const val = el("span", { className: "sigma-row__val" });
-    val.textContent = v.toFixed(4);
-
-    barWrap.appendChild(label);
-    barWrap.appendChild(barOuter);
-    barWrap.appendChild(val);
-    wrap.appendChild(barWrap);
+  for (let i = 0; i < Sk.length; i++) {
+    const pct = Sk[i] / maxS;
+    const x = pad.left + i * (barW + 1);
+    const h = Math.max(1, pct * chartH);
+    const y = pad.top + chartH - h;
+    const bar = document.createElementNS(svgNS, "rect");
+    bar.setAttribute("x", x.toString());
+    bar.setAttribute("y", y.toString());
+    bar.setAttribute("width", barW.toString());
+    bar.setAttribute("height", h.toString());
+    bar.setAttribute("fill", i < r ? "var(--accent)" : "var(--panel3)");
+    bar.setAttribute("rx", "1");
+    wrap.appendChild(bar);
   }
 
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  while (wrap.firstChild) svg.appendChild(wrap.firstChild);
+  wrap.appendChild(svg);
   container.appendChild(wrap);
 }
 
+// Слайдер переключения между итерациями с кнопками play/pause
+// Слайдер переключения между итерациями с кнопками play/pause
 export function renderIterationSlider(container, history, onIterChange) {
   if (!history || history.length < 2) return;
 
@@ -185,6 +189,7 @@ export function renderIterationSlider(container, history, onIterChange) {
   return { slider, history, val, maxIter };
 }
 
+// Столбчатая диаграмма ошибок алгоритмов (frob-норма)
 export function renderBarChart(container, algorithms) {
   const wrap = el("div", { className: "bar-chart" });
 
@@ -238,6 +243,7 @@ export function renderBarChart(container, algorithms) {
   container.appendChild(wrap);
 }
 
+// Радиальный график затухания (для эксперимента с возмущением)
 export function renderRadialDecay(container, decay) {
   if (!decay || !decay.length) return;
 

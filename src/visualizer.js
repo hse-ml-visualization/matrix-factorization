@@ -34,6 +34,7 @@ function subNum(n) {
 
 // ── Pipeline generators ──
 
+// Генерирует конвейер SVD: A → U·Σ·Vᵀ с поэтапной визуализацией
 export function generateSvdPipeline(A, k) {
   const { m, n } = dims(A);
   const result = svdTruncated(A, k);
@@ -68,6 +69,7 @@ export function generateSvdPipeline(A, k) {
   return steps;
 }
 
+// Конвейер PCA: A → центрирование → SVD → сдвиг обратно
 export function generatePcaPipeline(A, k) {
   const { m, n } = dims(A);
   const result = pcaReconstructWithSteps(A, k);
@@ -106,6 +108,7 @@ export function generatePcaPipeline(A, k) {
   return steps;
 }
 
+// Конвейер NMF: A → сдвиг → мультипликативное обновление W·H → Ahat
 export function generateNmfPipeline(A, k, totalIters) {
   const { m, n } = dims(A);
   const { mn } = minMax(A);
@@ -150,6 +153,7 @@ export function generateNmfPipeline(A, k, totalIters) {
   return steps;
 }
 
+// Конвейер CUR: A → выбор столбцов/строк C, R → псевдообратная → Ahat
 export function generateCurPipeline(A, k) {
   const { m, n } = dims(A);
   const result = curReconstruct(A, k);
@@ -179,6 +183,7 @@ export function generateCurPipeline(A, k) {
   return steps;
 }
 
+// Конвейер ALS: A → чередующиеся наименьшие квадраты X·Yᵀ → Ahat
 export function generateAlsPipeline(A, k, totalIters) {
   const { m, n } = dims(A);
   const scaleA = minMax(A);
@@ -216,6 +221,7 @@ export function generateAlsPipeline(A, k, totalIters) {
   return steps;
 }
 
+// Диспетчер: вызывает нужный generate*Pipeline по строке algo
 export function generatePipeline(algo, A, k, iters) {
   switch (algo) {
     case "svd": return generateSvdPipeline(A, k);
@@ -719,6 +725,25 @@ function makeLabel(text) {
   return el;
 }
 
+function lab(text, extra) {
+  const el = document.createElement("div");
+  el.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center" + (extra ? ";" + extra : "");
+  el.textContent = text;
+  return el;
+}
+
+function mwrap(container, text, M, s) {
+  const w = document.createElement("div");
+  w.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
+  const l = lab(text);
+  w.appendChild(l);
+  const h = document.createElement("div");
+  renderMatrixBlock(h, "", M, { scale: s });
+  w.appendChild(h);
+  container.appendChild(w);
+  return h;
+}
+
 
 
 function liveProduct(body, data) {
@@ -743,39 +768,12 @@ function liveProduct(body, data) {
 
   const row = document.createElement("div");
   row.style.cssText = "display:flex;gap:0.5rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:0.5rem";
-  const wrapA = document.createElement("div");
-  wrapA.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-  const lblA = document.createElement("div");
-  lblA.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-  lblA.textContent = data.leftLabel;
-  wrapA.appendChild(lblA);
-  const hostA = document.createElement("div");
-  renderMatrixBlock(hostA, "", A, { scale: sA });
-  wrapA.appendChild(hostA);
-  row.appendChild(wrapA);
+  const hostA = mwrap(row, data.leftLabel, A, sA);
   row.appendChild(makeOpSign("·"));
-  const wrapB = document.createElement("div");
-  wrapB.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-  const lblB = document.createElement("div");
-  lblB.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-  lblB.textContent = data.rightLabel;
-  wrapB.appendChild(lblB);
-  const hostB = document.createElement("div");
-  renderMatrixBlock(hostB, "", B, { scale: sB });
-  wrapB.appendChild(hostB);
-  row.appendChild(wrapB);
+  const hostB = mwrap(row, data.rightLabel, B, sB);
   row.appendChild(makeOpSign("="));
-  const hostR = document.createElement("div");
-  hostR.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-  const lblR = document.createElement("div");
-  lblR.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-  lblR.textContent = data.resultLabel;
-  hostR.appendChild(lblR);
-  const rHost = document.createElement("div");
   const working = zeros(mA, nB);
-  renderMatrixBlock(rHost, "", working, { scale: sR });
-  hostR.appendChild(rHost);
-  row.appendChild(hostR);
+  const rHost = mwrap(row, data.resultLabel, working, sR);
   body.appendChild(row);
 
   const trace = document.createElement("div");
@@ -881,45 +879,15 @@ function liveTriple(body, data) {
 
   const row1 = document.createElement("div");
   row1.style.cssText = "display:flex;gap:0.5rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:0.3rem";
-
-  const wrapA1 = document.createElement("div");
-  wrapA1.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-  const lblA1 = document.createElement("div");
-  lblA1.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-  lblA1.textContent = data.aLabel;
-  wrapA1.appendChild(lblA1);
-  const hostA1 = document.createElement("div");
-  renderMatrixBlock(hostA1, "", A, { scale: sA });
-  wrapA1.appendChild(hostA1);
-  row1.appendChild(wrapA1);
+  const hostA1 = mwrap(row1, data.aLabel, A, sA);
   row1.appendChild(makeOpSign("·"));
-
-  const wrapB1 = document.createElement("div");
-  wrapB1.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-  const lblB1 = document.createElement("div");
-  lblB1.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-  lblB1.textContent = data.bLabel;
-  wrapB1.appendChild(lblB1);
-  const hostB1 = document.createElement("div");
-  renderMatrixBlock(hostB1, "", B, { scale: sB });
-  wrapB1.appendChild(hostB1);
-  row1.appendChild(wrapB1);
+  const hostB1 = mwrap(row1, data.bLabel, B, sB);
   row1.appendChild(makeOpSign("="));
-
-  const hostT = document.createElement("div");
-  hostT.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-  const lblT = document.createElement("div");
-  lblT.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-  lblT.textContent = "U·Σ";
-  hostT.appendChild(lblT);
-  const rHostT = document.createElement("div");
   const working1 = zeros(mA, q);
-  renderMatrixBlock(rHostT, "", working1, { scale: sT });
+  const rHostT = mwrap(row1, "U·Σ", working1, sT);
   rHostT.dataset.rows = mA;
   rHostT.dataset.cols = q;
   rHostT.dataset.scale = JSON.stringify(sT);
-  hostT.appendChild(rHostT);
-  row1.appendChild(hostT);
   body.appendChild(row1);
 
   // Phase 2: temp · Vᵀ → result
@@ -932,38 +900,17 @@ function liveTriple(body, data) {
 
   const row2 = document.createElement("div");
   row2.style.cssText = "display:flex;gap:0.5rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:0.3rem";
-
   const hostA2 = document.createElement("div");
   renderMatrixBlock(hostA2, "", temp, { scale: sT });
   row2.appendChild(hostA2);
   row2.appendChild(makeOpSign("·"));
-
-  const wrapB2 = document.createElement("div");
-  wrapB2.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-  const lblB2 = document.createElement("div");
-  lblB2.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-  lblB2.textContent = data.cLabel;
-  wrapB2.appendChild(lblB2);
-  const hostB2 = document.createElement("div");
-  renderMatrixBlock(hostB2, "", C, { scale: sC });
-  wrapB2.appendChild(hostB2);
-  row2.appendChild(wrapB2);
+  const hostB2 = mwrap(row2, data.cLabel, C, sC);
   row2.appendChild(makeOpSign("="));
-
-  const hostR2 = document.createElement("div");
-  hostR2.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-  const lblR2 = document.createElement("div");
-  lblR2.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-  lblR2.textContent = data.resultLabel;
-  hostR2.appendChild(lblR2);
-  const rHostR2 = document.createElement("div");
   const working2 = zeros(mA, nC);
-  renderMatrixBlock(rHostR2, "", working2, { scale: sR });
+  const rHostR2 = mwrap(row2, data.resultLabel, working2, sR);
   rHostR2.dataset.rows = mA;
   rHostR2.dataset.cols = nC;
   rHostR2.dataset.scale = JSON.stringify(sR);
-  hostR2.appendChild(rHostR2);
-  row2.appendChild(hostR2);
   phase2Wrap.appendChild(row2);
 
   const trace2 = document.createElement("div");
@@ -1091,55 +1038,28 @@ function liveTriple(body, data) {
   createFrameSlider(body, totalFrames, renderFrame, { speed: 250 });
 }
 
-function liveAddition(body, data) {
-  const A = data.left, B = data.right, R = data.result;
+function liveBinaryOp(body, data, op, opChar) {
+  const A = data.left, B = data.right;
   const m = A.length, n = A[0].length;
-  const sA = minMax(A), sR = minMax(R);
+  const sA = minMax(A), sR = minMax(data.result);
   const working = zeros(m, n);
 
   const cellData = [];
   for (let i = 0; i < m; i++) {
     for (let j = 0; j < n; j++) {
       const vB = B.length === 1 ? (B[0] ? B[0][j] || 0 : 0) : (B[i] ? B[i][j] || 0 : 0);
-      cellData.push({ i, j, value: A[i][j] + vB, vA: A[i][j], vB });
+      cellData.push({ i, j, value: op(A[i][j], vB), vA: A[i][j], vB });
     }
   }
   const totalFrames = cellData.length + 1;
 
   const row = document.createElement("div");
   row.style.cssText = "display:flex;gap:0.5rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:0.5rem";
-  const wrapA = document.createElement("div");
-  wrapA.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-  const lblA = document.createElement("div");
-  lblA.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-  lblA.textContent = data.leftLabel;
-  wrapA.appendChild(lblA);
-  const hostA = document.createElement("div");
-  renderMatrixBlock(hostA, "", A, { scale: sA });
-  wrapA.appendChild(hostA);
-  row.appendChild(wrapA);
-  row.appendChild(makeOpSign("+"));
-  const wrapB = document.createElement("div");
-  wrapB.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-  const lblB = document.createElement("div");
-  lblB.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-  lblB.textContent = data.rightLabel;
-  wrapB.appendChild(lblB);
-  const hostB = document.createElement("div");
-  renderMatrixBlock(hostB, "", B, { scale: sA });
-  wrapB.appendChild(hostB);
-  row.appendChild(wrapB);
+  const hostA = mwrap(row, data.leftLabel, A, sA);
+  row.appendChild(makeOpSign(opChar));
+  const hostB = mwrap(row, data.rightLabel, B, sA);
   row.appendChild(makeOpSign("="));
-  const hostR = document.createElement("div");
-  hostR.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-  const lblR = document.createElement("div");
-  lblR.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-  lblR.textContent = data.resultLabel;
-  hostR.appendChild(lblR);
-  const rHost = document.createElement("div");
-  renderMatrixBlock(rHost, "", working, { scale: sR });
-  hostR.appendChild(rHost);
-  row.appendChild(hostR);
+  const rHost = mwrap(row, data.resultLabel, working, sR);
   body.appendChild(row);
 
   const trace = document.createElement("div");
@@ -1188,116 +1108,9 @@ function liveAddition(body, data) {
       if (cellsA[lastIdx]) cellsA[lastIdx].style.boxShadow = "inset 0 0 0 3px var(--good)";
       if (cellsB[lastIdx]) cellsB[lastIdx].style.boxShadow = "inset 0 0 0 3px var(--bad)";
       if (cellsR[lastIdx]) cellsR[lastIdx].style.boxShadow = "inset 0 0 0 3px var(--accent), 0 0 18px rgba(91,156,246,0.6)";
-      trace.innerHTML = `${data.leftLabel}<sub>${last.i}${last.j}</sub> + ${data.rightLabel}<sub>${last.i}${last.j}</sub> = ${last.vA.toFixed(2)} + ${last.vB.toFixed(2)} = <b>${last.value.toFixed(2)}</b>`;
-      info.textContent = `(${last.i},${last.j}): ${last.vA.toFixed(2)} + ${last.vB.toFixed(2)} = ${last.value.toFixed(2)}`;
-    } else {
-      trace.innerHTML = "";
-      info.textContent = "";
-    }
-  }
-
-  createFrameSlider(body, totalFrames, renderFrame, { speed: 300 });
-}
-
-function liveSubtraction(body, data) {
-  const A = data.left, B = data.right, R = data.result;
-  const m = A.length, n = A[0].length;
-  const sA = minMax(A), sR = minMax(R);
-  const working = zeros(m, n);
-
-  const cellData = [];
-  for (let i = 0; i < m; i++) {
-    for (let j = 0; j < n; j++) {
-      const vB = B.length === 1 ? (B[0] ? B[0][j] || 0 : 0) : (B[i] ? B[i][j] || 0 : 0);
-      cellData.push({ i, j, value: A[i][j] - vB, vA: A[i][j], vB });
-    }
-  }
-  const totalFrames = cellData.length + 1;
-
-  const row = document.createElement("div");
-  row.style.cssText = "display:flex;gap:0.5rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:0.5rem";
-  const wrapA = document.createElement("div");
-  wrapA.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-  const lblA = document.createElement("div");
-  lblA.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-  lblA.textContent = data.leftLabel;
-  wrapA.appendChild(lblA);
-  const hostA = document.createElement("div");
-  renderMatrixBlock(hostA, "", A, { scale: sA });
-  wrapA.appendChild(hostA);
-  row.appendChild(wrapA);
-  row.appendChild(makeOpSign("−"));
-  const wrapB = document.createElement("div");
-  wrapB.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-  const lblB = document.createElement("div");
-  lblB.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-  lblB.textContent = data.rightLabel;
-  wrapB.appendChild(lblB);
-  const hostB = document.createElement("div");
-  renderMatrixBlock(hostB, "", B, { scale: sA });
-  wrapB.appendChild(hostB);
-  row.appendChild(wrapB);
-  row.appendChild(makeOpSign("="));
-  const hostR = document.createElement("div");
-  hostR.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-  const lblR = document.createElement("div");
-  lblR.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-  lblR.textContent = data.resultLabel;
-  hostR.appendChild(lblR);
-  const rHost = document.createElement("div");
-  renderMatrixBlock(rHost, "", working, { scale: sR });
-  hostR.appendChild(rHost);
-  row.appendChild(hostR);
-  body.appendChild(row);
-
-  const trace = document.createElement("div");
-  trace.style.cssText = "font-size:0.85rem;color:var(--text);text-align:center;font-family:monospace;min-height:2rem;padding:0.3rem;background:rgba(0,0,0,0.12);border-radius:6px;margin:0.3rem 0";
-  body.appendChild(trace);
-
-  const info = document.createElement("div");
-  info.style.cssText = "font-size:0.75rem;color:var(--muted);text-align:center";
-  body.appendChild(info);
-
-  const cellsA = hostA.querySelectorAll(".cell");
-  const cellsB = hostB.querySelectorAll(".cell");
-
-  function renderFrame(frame) {
-    for (let ci = 0; ci < m; ci++) {
-      for (let cj = 0; cj < n; cj++) {
-        const idx = ci * n + cj;
-        const cellsR = rHost.querySelectorAll(".cell");
-        if (!cellsR[idx]) continue;
-        if (idx < frame) {
-          const cd = cellData[idx];
-          working[ci][cj] = cd.value;
-          const t = sR.mx > sR.mn ? (cd.value - sR.mn) / (sR.mx - sR.mn) : 0.5;
-          const c = viridis(Math.max(0, Math.min(1, t)));
-          cellsR[idx].style.background = viridisRgb(c);
-          cellsR[idx].style.color = t > 0.6 ? "#080c14" : "#fff";
-          cellsR[idx].textContent = cd.value.toFixed(2);
-          cellsR[idx].style.boxShadow = "";
-          if (cellsA[idx]) cellsA[idx].style.boxShadow = "";
-          if (cellsB[idx]) cellsB[idx].style.boxShadow = "";
-        } else {
-          working[ci][cj] = 0;
-          cellsR[idx].style.background = "";
-          cellsR[idx].style.color = "";
-          cellsR[idx].textContent = "";
-          cellsR[idx].style.boxShadow = "";
-          if (cellsA[idx]) cellsA[idx].style.boxShadow = "";
-          if (cellsB[idx]) cellsB[idx].style.boxShadow = "";
-        }
-      }
-    }
-    if (frame > 0) {
-      const last = cellData[frame - 1];
-      const cellsR = rHost.querySelectorAll(".cell");
-      const lastIdx = (frame - 1);
-      if (cellsA[lastIdx]) cellsA[lastIdx].style.boxShadow = "inset 0 0 0 3px var(--good)";
-      if (cellsB[lastIdx]) cellsB[lastIdx].style.boxShadow = "inset 0 0 0 3px var(--bad)";
-      if (cellsR[lastIdx]) cellsR[lastIdx].style.boxShadow = "inset 0 0 0 3px var(--accent), 0 0 18px rgba(91,156,246,0.6)";
-      trace.innerHTML = `${data.leftLabel}<sub>${last.i}${last.j}</sub> − ${data.rightLabel}<sub>${last.i}${last.j}</sub> = ${last.vA.toFixed(2)} − ${last.vB.toFixed(2)} = <b>${last.value.toFixed(2)}</b>`;
-      info.textContent = `(${last.i},${last.j}): ${last.vA.toFixed(2)} − ${last.vB.toFixed(2)} = ${last.value.toFixed(2)}`;
+      const s1 = last.vA.toFixed(2), s2 = last.vB.toFixed(2), sv = last.value.toFixed(2);
+      trace.innerHTML = `${data.leftLabel}<sub>${last.i}${last.j}</sub> ${opChar} ${data.rightLabel}<sub>${last.i}${last.j}</sub> = ${s1} ${opChar} ${s2} = <b>${sv}</b>`;
+      info.textContent = `(${last.i},${last.j}): ${s1} ${opChar} ${s2} = ${sv}`;
     } else {
       trace.innerHTML = "";
       info.textContent = "";
@@ -1501,70 +1314,13 @@ function liveNorms(body, data) {
   createFrameSlider(body, totalFrames, renderFrame, { speed: 250 });
 }
 
-function liveSelection(body, data) {
-  const info = document.createElement("div");
-  info.style.cssText = "font-size:0.82rem;color:var(--text);text-align:center;margin-bottom:0.4rem";
-  info.innerHTML = `Строки: [${data.topRows.join(", ")}] &nbsp; Столбцы: [${data.topCols.join(", ")}]`;
-  body.appendChild(info);
-
-  const matDefs = [
-    { label: "C", M: data.C, cols: data.C[0].length, s: minMax(data.C) },
-    { label: "R", M: data.R, cols: data.R[0].length, s: minMax(data.R) },
-    { label: "W", M: data.W, cols: data.W[0].length, s: minMax(data.W) },
-  ];
-  const row = document.createElement("div");
-  row.style.cssText = "display:flex;gap:0.8rem;align-items:center;justify-content:center;flex-wrap:wrap";
-  const hosts = [];
-  const allCells = [];
-  let maxCells = 0;
-  for (const def of matDefs) {
-    const host = renderSandboxMatrix(row, def.label, zeros(def.M.length, def.M[0].length), def.s);
-    const cells = [];
-    for (let i = 0; i < def.M.length; i++) {
-      for (let j = 0; j < def.M[0].length; j++) {
-        cells.push({ i, j, value: def.M[i][j], cols: def.M[0].length, s: def.s });
-      }
-    }
-    allCells.push({ cells, host, cols: def.M[0].length });
-    maxCells = Math.max(maxCells, cells.length);
-    hosts.push(host);
+function liveInit(body, data, header) {
+  if (header) {
+    const info = document.createElement("div");
+    info.style.cssText = "font-size:0.82rem;color:var(--text);text-align:center;margin-bottom:0.4rem";
+    info.innerHTML = header;
+    body.appendChild(info);
   }
-  body.appendChild(row);
-  const info2 = document.createElement("div");
-  info2.style.cssText = "font-size:0.75rem;color:var(--muted);text-align:center;margin-top:0.3rem";
-  body.appendChild(info2);
-
-  const totalFrames = maxCells + 1;
-  function renderFrame(n) {
-    for (let hi = 0; hi < allCells.length; hi++) {
-      const { cells, host, cols } = allCells[hi];
-      const hostCells = host.querySelectorAll(".cell");
-      for (let ci = 0; ci < cells.length; ci++) {
-        const cd = cells[ci];
-        const idx = cd.i * cols + cd.j;
-        if (!hostCells[idx]) continue;
-        if (ci < n) {
-          const t = cd.s.mx > cd.s.mn ? (cd.value - cd.s.mn) / (cd.s.mx - cd.s.mn) : 0.5;
-          const c = viridis(t);
-          hostCells[idx].style.background = viridisRgb(c);
-          hostCells[idx].style.color = t > 0.6 ? "#080c14" : "#fff";
-          hostCells[idx].textContent = cd.value.toFixed(2);
-          hostCells[idx].style.boxShadow = ci === n - 1 ? "inset 0 0 0 3px var(--accent), 0 0 18px rgba(91,156,246,0.6)" : "";
-        } else {
-          hostCells[idx].style.background = "";
-          hostCells[idx].style.color = "";
-          hostCells[idx].textContent = "";
-          hostCells[idx].style.boxShadow = "";
-        }
-      }
-    }
-    info2.textContent = n === 0 ? "" : (n >= maxCells ? "Готово" : `Заполнено ${n}/${maxCells}`);
-  }
-
-  createFrameSlider(body, totalFrames, renderFrame, { speed: 200 });
-}
-
-function liveInit(body, data) {
   const row = document.createElement("div");
   row.style.cssText = "display:flex;gap:0.8rem;align-items:center;justify-content:center;flex-wrap:wrap";
   const matDefs = [];
@@ -2178,13 +1934,13 @@ function showArrowDetail(arrowStep, steps, arrowIndex) {
       switch (data.type) {
         case "matrix_product": liveProduct(body, data); break;
         case "triple_product": liveTriple(body, data); break;
-        case "addition": liveAddition(body, data); break;
-        case "subtraction": liveSubtraction(body, data); break;
+        case "addition": liveBinaryOp(body, data, (a,b)=>a+b, "+"); break;
+        case "subtraction": liveBinaryOp(body, data, (a,b)=>a-b, "−"); break;
         case "means": liveMeans(body, data); break;
         case "eigenvalues": liveEigenvalues(body, data); break;
         case "values_map": liveValueMap(body, data); break;
         case "norm_computation": liveNorms(body, data); break;
-        case "selection": liveSelection(body, data); break;
+        case "selection": liveInit(body, { matrices: ["C","R","W"].map(k => ({ label:k, matrix:data[k], cols:data[k][0].length })) }, `Строки: [${data.topRows.join(", ")}] &nbsp; Столбцы: [${data.topCols.join(", ")}]`); break;
         case "init_matrices": liveInit(body, data); break;
         case "iteration_note": liveNote(body, data); break;
         case "iteration_history": liveIterationHistory(body, data); break;
@@ -2530,6 +2286,7 @@ function applyPreset(name, rows, cols, seed = 42) {
 
 // ── Main page render ──
 
+// Главная точка входа: рендерит всю страницу визуализатора с конвейером
 export function renderVisualizerPage(container, state) {
   try {
   clear(container);

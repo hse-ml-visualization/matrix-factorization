@@ -46,6 +46,7 @@ function section(title, content) {
   return sec;
 }
 
+// Рендерит страницу теории: все 5 алгоритмов с формулами и описанием
 export function renderTheoryPage(container) {
   container.innerHTML = `
     <div class="theory-intro">

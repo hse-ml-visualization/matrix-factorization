@@ -1,3 +1,4 @@
+// Генератор псевдослучайных чисел Mulberry32 (32-битный, детерминированный)
 export function mulberry32(seed) {
   let a = seed >>> 0;
   return function () {
@@ -9,6 +10,7 @@ export function mulberry32(seed) {
   };
 }
 
+// Ограничивает x отрезком [lo, hi]
 export function clamp(x, lo, hi) {
   return Math.max(lo, Math.min(hi, x));
 }

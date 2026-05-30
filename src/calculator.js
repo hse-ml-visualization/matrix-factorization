@@ -116,6 +116,7 @@ function animateStep(el, delay, type) {
   el.appendChild(glow);
 }
 
+// Рендерит страницу матричного калькулятора
 export function renderCalcPage(container) {
   container.innerHTML = "";
 

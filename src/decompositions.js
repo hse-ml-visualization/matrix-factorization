@@ -1,30 +1,21 @@
 /* global numeric */
 
-import { clone, dims, dot, transpose, diag, zeros, minMax } from "./matrix.js";
+import { clone, dims, dot, transpose, diag, zeros, minMax, diff, frobNorm } from "./matrix.js";
 import { mulberry32 } from "./rng.js";
 
-function takeUk(U, k) {
-  const m = U.length;
-  const Uk = new Array(m);
+// Берёт первые k столбцов матрицы M
+function takeCols(M, k) {
+  const m = M.length;
+  const out = new Array(m);
   for (let i = 0; i < m; i++) {
     const row = new Array(k);
-    for (let t = 0; t < k; t++) row[t] = U[i][t];
-    Uk[i] = row;
+    for (let t = 0; t < k; t++) row[t] = M[i][t];
+    out[i] = row;
   }
-  return Uk;
+  return out;
 }
 
-function takeVk(V, k) {
-  const n = V.length;
-  const Vk = new Array(n);
-  for (let i = 0; i < n; i++) {
-    const row = new Array(k);
-    for (let t = 0; t < k; t++) row[t] = V[i][t];
-    Vk[i] = row;
-  }
-  return Vk;
-}
-
+// Детерминированный seed из данных матрицы и соли
 function seededFromMatrix(A, salt = 0) {
   let h = (2166136261 ^ (salt >>> 0)) >>> 0;
   const m = A.length;
@@ -42,34 +33,16 @@ function seededFromMatrix(A, salt = 0) {
   return h >>> 0;
 }
 
-function frobNormMat(M) {
-  let s = 0;
-  const { m, n } = dims(M);
-  for (let i = 0; i < m; i++)
-    for (let j = 0; j < n; j++) s += M[i][j] * M[i][j];
-  return Math.sqrt(s);
-}
-
-function diffMat(A, B) {
-  const { m, n } = dims(A);
-  const D = new Array(m);
-  for (let i = 0; i < m; i++) {
-    const row = new Array(n);
-    for (let j = 0; j < n; j++) row[j] = A[i][j] - B[i][j];
-    D[i] = row;
-  }
-  return D;
-}
-
+// Усечённое SVD ранга k; при m<n транспонирует вход для numeric.svd
 export function svdTruncated(A, k) {
   const { m, n } = dims(A);
   const needTranspose = m < n;
   const X = needTranspose ? transpose(A) : A;
   const { U, S, V } = numeric.svd(X);
   const r = Math.max(1, Math.min(k, S.length, U[0].length, V.length, m, n));
-  let Uk = takeUk(U, r);
+  let Uk = takeCols(U, r);
   let Sk = S.slice(0, r);
-  let Vk = takeVk(V, r);
+  let Vk = takeCols(V, r);
   if (needTranspose) {
     const tmp = Uk; Uk = Vk; Vk = tmp;
     const tmp2 = U; U = V; V = tmp2;
@@ -79,11 +52,13 @@ export function svdTruncated(A, k) {
   return { Ahat, U, S, V, r, Uk, Sk, Vk, US };
 }
 
+// PCA: реконструкция через SVD; возвращает только Ahat, mean, S, r
 export function pcaReconstruct(A, k) {
   const { Ahat, mean, S, r } = pcaReconstructWithSteps(A, k);
   return { Ahat, mean, S, r };
 }
 
+// PCA с промежуточными шагами (центрирование, SVD, сдвиг обратно)
 export function pcaReconstructWithSteps(A, k) {
   const { m, n } = dims(A);
   const mean = new Array(n).fill(0);
@@ -100,10 +75,12 @@ export function pcaReconstructWithSteps(A, k) {
   return { Ahat, mean, X, S, r, Uk, Sk, Vk, US, Xk };
 }
 
+// NMF: реконструкция через мультипликативное обновление; возвращает только результат
 export function nmfReconstruct(A, k, iters = 80) {
   return nmfReconstructHistory(A, k, iters, false).result;
 }
 
+// NMF с историей итераций; сдвигает матрицу для неотрицательности
 export function nmfReconstructHistory(A, k, totalIters = 80, captureHistory = true) {
   const { m, n } = dims(A);
   const { mn } = minMax(A);
@@ -138,8 +115,8 @@ export function nmfReconstructHistory(A, k, totalIters = 80, captureHistory = tr
     if (captureIters.has(iter)) {
       const Ahat = zeros(m, n);
       for (let i = 0; i < m; i++) for (let j = 0; j < n; j++) Ahat[i][j] = WH[i][j] - shift;
-      const err = diffMat(A, Ahat);
-      const frob = frobNormMat(err);
+      const err = diff(A, Ahat);
+      const frob = frobNorm(err);
       history.push({ i: iter, frob, Ahat, W: clone(W), H: clone(H) });
     }
   };
@@ -182,6 +159,7 @@ export function nmfReconstructHistory(A, k, totalIters = 80, captureHistory = tr
   };
 }
 
+// Псевдообратная Мура–Пенроуза через SVD; при m<n транспонирует
 export function pinv(A) {
   const m = A.length;
   const n = A[0].length;
@@ -191,11 +169,12 @@ export function pinv(A) {
   const tol = 1e-10 * Math.max(...S);
   const Sinv = zeros(r, r);
   for (let i = 0; i < r; i++) Sinv[i][i] = S[i] > tol ? 1 / S[i] : 0;
-  const Ur = takeUk(U, r);
-  const Vr = takeVk(V, r);
+  const Ur = takeCols(U, r);
+  const Vr = takeCols(V, r);
   return dot(dot(Vr, Sinv), transpose(Ur));
 }
 
+// CUR-разложение: выбирает r столбцов/строк по квадратам норм
 export function curReconstruct(A, k) {
   const { m, n } = dims(A);
   const r = Math.max(1, Math.min(k, m, n));
@@ -222,10 +201,12 @@ export function curReconstruct(A, k) {
   return { Ahat, C, U: Uc, R, Wcore, topRows, topCols, r, Cp, Rp };
 }
 
+// ALS: реконструкция через чередующиеся наименьшие квадраты; возвращает только результат
 export function alsReconstruct(A, k, iters = 80, reg = 1e-2) {
   return alsReconstructHistory(A, k, iters, reg, false).result;
 }
 
+// ALS с историей итераций; чередует фиксацию X/Y с L2-регуляризацией
 export function alsReconstructHistory(A, k, totalIters = 80, reg = 1e-2, captureHistory = true) {
   const { m, n } = dims(A);
   const r = Math.max(1, Math.min(k, m, n));
@@ -253,8 +234,8 @@ export function alsReconstructHistory(A, k, totalIters = 80, reg = 1e-2, capture
     if (!captureHistory) return;
     if (captureIters.has(iter)) {
       const Ahat = dot(Xcur, transpose(Ycur));
-      const err = diffMat(A, Ahat);
-      const frob = frobNormMat(err);
+      const err = diff(A, Ahat);
+      const frob = frobNorm(err);
       history.push({ i: iter, frob, Ahat, X: clone(Xcur), Y: clone(Ycur) });
     }
   };

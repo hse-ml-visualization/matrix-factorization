@@ -1,6 +1,7 @@
 import { viridis, diverging, rgb } from "./palettes.js";
 import { minMax } from "./matrix.js";
 
+// Пытается отрендерить LaTeX-заголовок через KaTeX, иначе возвращает как есть
 function renderTitle(title) {
   if (!/[_^\\]/.test(title)) return title;
   const stripped = title.replace(/\\text\{[^}]*\}/g, "");
@@ -12,6 +13,7 @@ function renderTitle(title) {
   }
 }
 
+// Рисует легенду для sequential и/или diverging цветовых схем
 export function renderLegend(host, kinds) {
   const set = new Set(kinds);
   const wrap = document.createElement("div");
@@ -37,6 +39,7 @@ export function renderLegend(host, kinds) {
   host.appendChild(wrap);
 }
 
+// Рендерит матричный блок: заголовок, размерность, сетку ячеек с viridis/diverging
 export function renderMatrixBlock(parent, title, A, options = {}) {
   const { subtitle, selected, badge, onCellClick, diverge = false, scale, onDblClick, onCellCreate } = options;
   const { mn, mx } = scale || minMax(A);
@@ -117,6 +120,7 @@ export function renderMatrixBlock(parent, title, A, options = {}) {
   parent.appendChild(block);
 }
 
+// Заменяет ячейку на input для редактирования значения
 function startEdit(cell, originalVal, onCommit) {
   const input = document.createElement("input");
   input.type = "text";

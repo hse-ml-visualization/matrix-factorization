@@ -9,6 +9,7 @@ codeBlocks.svd = {
     <strong>Где используется:</strong> сжатие изображений, шумоподавление, рекомендации.`,
   example: "Фотография 1000×1000 пикселей через SVD с k=100: вместо 1 000 000 значений храним 100·(1000+1000) = 200 000. Сжатие в 5 раз без заметной потери качества.",
   js: `// Усечённое SVD через numeric.js
+// Усечённое SVD для страницы «Код» (автономная копия)
 export function svdTruncated(A, k) {
   // Вызываем полное SVD из библиотеки numeric
   const { U, S, V } = numeric.svd(A);
@@ -388,6 +389,7 @@ function escapeHtml(s) {
     .replace(/>/g, "&gt;");
 }
 
+// Рендерит страницу «Код» с алгоритмами, примерами и интерактивным редактором
 export function renderCodePage(container) {
   let html = `
     <style>

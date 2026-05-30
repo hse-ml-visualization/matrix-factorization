@@ -7,6 +7,7 @@ function tex(latex) {
   return latexToHtml(latex, false);
 }
 
+// Формирует список алгоритмов для эксперимента на основе state
 export function algoListFromState(state, rangeLo = null) {
   const lo = rangeLo !== null && Number.isFinite(rangeLo) ? rangeLo : state.range[0];
   const algos = [];
@@ -38,6 +39,7 @@ function radialDecay(M, i0, j0) {
   return ds.map((d) => ({ d, val: bins.get(d).sum / bins.get(d).count }));
 }
 
+// Эксперимент: сравнивает качество восстановления центра и краёв матрицы
 export function renderCenterEdgeExperiment(container, state) {
   clear(container);
 
@@ -119,6 +121,7 @@ export function renderCenterEdgeExperiment(container, state) {
   }
 }
 
+// Эксперимент: возмущает один элемент матрицы и оценивает влияние на Ahat
 export function renderPerturbation(container, state) {
   clear(container);
 
