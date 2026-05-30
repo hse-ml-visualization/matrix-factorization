@@ -17,7 +17,8 @@ export function clone(A) {
 }
 
 export function dims(A) {
-  return { m: A.length, n: A[0].length };
+  const m = A.length;
+  return { m, n: m ? A[0].length : 0 };
 }
 
 export function randomMatrix(m, n, lo, hi, seed = 42) {

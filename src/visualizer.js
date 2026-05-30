@@ -855,13 +855,13 @@ function liveTriple(body, data) {
     }
   }
 
-  const kMax = Math.min(q, C.length);
+  if (C.length < q) throw new Error("Dimension mismatch: C rows < q");
   const cellData2 = [];
   for (let i = 0; i < mA; i++) {
     for (let j = 0; j < nC; j++) {
       let sum = 0;
       const parts = [];
-      for (let k = 0; k < kMax; k++) {
+      for (let k = 0; k < q; k++) {
         const term = temp[i][k] * C[k][j];
         sum += term;
         parts.push(`${temp[i][k].toFixed(2)}·${C[k][j].toFixed(2)}`);
