@@ -76,8 +76,8 @@ export function generatePcaPipeline(A, k) {
   const Xt = transpose(X);
   const scaleA = minMax(A);
   const scaleX = minMax(X);
-  const sigmaDiag = zeros(Math.min(m, n), Math.min(m, n));
-  for (let i = 0; i < Sk.length && i < sigmaDiag.length; i++) sigmaDiag[i][i] = Sk[i];
+  const sigmaDiag = zeros(result.r, result.r);
+  for (let i = 0; i < Sk.length && i < result.r; i++) sigmaDiag[i][i] = Sk[i];
   const meanRow = [mean.slice()];
   const cov = dot(Xt, X);
 
@@ -89,8 +89,8 @@ export function generatePcaPipeline(A, k) {
   steps.push({ type: "matrix", id: "mean", title: "μ (средние)", subtitle: "По столбцам", data: meanRow, scale: minMax(meanRow) });
   steps.push({ type: "arrow", label: "Центрируем: X = A − μ", op: "transpose", data: { type: "subtraction", leftLabel: "A", left: A, rightLabel: "μ", right: meanRow, resultLabel: "X = A − μ", result: X } });
   steps.push({ type: "matrix", id: "X", title: "X = A − μ", subtitle: "Центрированные данные", data: X, scale: scaleX });
-  steps.push({ type: "arrow", label: "Ковариация: Xᵀ·X", op: "multiply", data: { type: "matrix_product", leftLabel: "Xᵀ", left: Xt, rightLabel: "X", right: X, resultLabel: "Xᵀ·X", result: cov } });
-  steps.push({ type: "matrix", id: "cov", title: "Xᵀ·X", subtitle: "Ковариационная матрица", data: cov, scale: null });
+  steps.push({ type: "arrow", label: "Xᵀ·X (матрица рассеивания)", op: "multiply", data: { type: "matrix_product", leftLabel: "Xᵀ", left: Xt, rightLabel: "X", right: X, resultLabel: "Xᵀ·X", result: cov } });
+  steps.push({ type: "matrix", id: "cov", title: "Xᵀ·X", subtitle: "Матрица рассеивания", data: cov, scale: null });
   steps.push({ type: "arrow", label: "Собственные значения и главные компоненты", op: "eigen", data: { type: "eigenvalues", values: lambdaVals.map((v, i) => ({ value: v, label: `λ${subNum(i + 1)}` })) } });
   steps.push({ type: "matrices_row", id: "comp", matrices: [
     { title: "U (на X)", data: Uk, subtitle: `размер ${m}×${result.r}` },
@@ -116,7 +116,9 @@ export function generateNmfPipeline(A, k, totalIters) {
   const cappedIters = Math.min(totalIters || 20, 50);
   const { result, history } = nmfReconstructHistory(A, k, cappedIters);
   const { Ahat, W, H } = result;
-  const WHinit = dot(W, H);
+  const W0 = history.length > 0 ? history[0].W : W;
+  const H0 = history.length > 0 ? history[0].H : H;
+  const WHinit = dot(W0, H0);
   const midIdx = Math.min(Math.floor(history.length / 2), history.length - 1);
   const midHist = history.length > 2 ? history[midIdx] : null;
 
@@ -126,17 +128,17 @@ export function generateNmfPipeline(A, k, totalIters) {
     steps.push({ type: "arrow", label: `Сдвиг на ${shift.toFixed(2)} для неотрицательности`, op: "normalize", data: { type: "iteration_note", text: `Все элементы A сдвигаются на ${shift.toFixed(2)}, чтобы минимальный элемент стал 0 (неотрицательность для NMF).` } });
     steps.push({ type: "matrix", id: "X", title: `A + ${shift.toFixed(2)}`, subtitle: "Неотрицательная", data: X, scale: minMax(X) });
   }
-  steps.push({ type: "arrow", label: "Инициализируем W и H случайно", op: "init", data: { type: "init_matrices", matrices: [{ label: "W", matrix: W }, { label: "H", matrix: H }] } });
+  steps.push({ type: "arrow", label: "Инициализируем W и H случайно", op: "init", data: { type: "init_matrices", matrices: [{ label: "W", matrix: W0 }, { label: "H", matrix: H0 }] } });
   steps.push({ type: "matrices_row", id: "init", matrices: [
-    { title: "W", data: W, subtitle: `${m}×${k}` },
-    { title: "H", data: H, subtitle: `${k}×${n}` },
+    { title: "W", data: W0, subtitle: `${m}×${k}` },
+    { title: "H", data: H0, subtitle: `${k}×${n}` },
   ]});
-  steps.push({ type: "arrow", label: "Первое приближение: W·H", op: "multiply", data: { type: "matrix_product", leftLabel: "W", left: W, rightLabel: "H", right: H, resultLabel: "W·H", result: WHinit } });
+  steps.push({ type: "arrow", label: "Первое приближение: W·H", op: "multiply", data: { type: "matrix_product", leftLabel: "W", left: W0, rightLabel: "H", right: H0, resultLabel: "W·H", result: WHinit } });
   steps.push({ type: "matrix", id: "WHinit", title: "W·H (начало)", data: WHinit, scale: scaleA });
   if (history.length > 1) {
-    steps.push({ type: "arrow", label: "Обновление W и H по итерациям", op: "multiply", data: { type: "iteration_history", history, scale: scaleA, label: "Итерация" } });
+    steps.push({ type: "iteration_viewer", id: "iters", label: "Обновление W и H по итерациям", history, matrixLabels: ["W", "H"] });
   }
-  steps.push({ type: "arrow", label: `Финальное W·H после ${cappedIters} итераций`, op: "multiply", data: { type: "matrix_product", leftLabel: "W", left: W, rightLabel: "H", right: H, resultLabel: "W·H", result: dot(W, H) } });
+  steps.push({ type: "arrow", label: `Финальное W·H после ${cappedIters} итераций`, op: "multiply", data: { type: "matrix_product", leftLabel: "W", left: W, rightLabel: "H", right: H, resultLabel: "Ã ≈ W·H", result: Ahat } });
   steps.push({ type: "matrices_row", id: "finalFactors", matrices: [
     { title: "W (финал)", data: W, subtitle: `${m}×${k}` },
     { title: "H (финал)", data: H, subtitle: `${k}×${n}` },
@@ -160,7 +162,7 @@ export function generateCurPipeline(A, k) {
 
   const steps = [];
   steps.push({ type: "matrix", id: "A", title: "A", subtitle: "Исходная матрица", data: A, scale: scaleA });
-  steps.push({ type: "arrow", label: "Считаем нормы строк и столбцов", op: "normalize", data: { type: "norm_computation", colNorms, rowNorms, topCols, topRows } });
+  steps.push({ type: "arrow", label: "Считаем квадраты норм строк и столбцов", op: "normalize", data: { type: "norm_computation", colNorms, rowNorms, topCols, topRows } });
   steps.push({ type: "norms", id: "norms", colNorms, rowNorms, topRows, topCols, r });
   steps.push({ type: "arrow", label: `Выбираем топ-${r} столбцов и строк`, op: "normalize", data: { type: "selection", topRows, topCols, C, R, W: Wcore } });
   steps.push({ type: "matrices_row", id: "CR", matrices: [
@@ -183,22 +185,24 @@ export function generateAlsPipeline(A, k, totalIters) {
   const cappedIters = Math.min(totalIters || 20, 50);
   const { result, history } = alsReconstructHistory(A, k, cappedIters, 1e-2);
   const { Ahat, X, Y, r } = result;
-  const Yt = transpose(Y);
-  const XYtInit = dot(X, Yt);
+  const X0 = history.length > 0 ? history[0].X : X;
+  const Y0 = history.length > 0 ? history[0].Y : Y;
+  const Y0t = transpose(Y0);
+  const XYtInit = dot(X0, Y0t);
   const midIdx = Math.min(Math.floor(history.length / 2), history.length - 1);
   const midHist = history.length > 2 ? history[midIdx] : null;
 
   const steps = [];
   steps.push({ type: "matrix", id: "A", title: "A", subtitle: "Исходная матрица", data: A, scale: scaleA });
-  steps.push({ type: "arrow", label: "Инициализируем X и Y случайно", op: "init", data: { type: "init_matrices", matrices: [{ label: "X", matrix: X }, { label: "Y", matrix: Y }] } });
+  steps.push({ type: "arrow", label: "Инициализируем X и Y случайно", op: "init", data: { type: "init_matrices", matrices: [{ label: "X", matrix: X0 }, { label: "Y", matrix: Y0 }] } });
   steps.push({ type: "matrices_row", id: "init", matrices: [
-    { title: "X", data: X, subtitle: `${m}×${r}` },
-    { title: "Y", data: Y, subtitle: `${n}×${r}` },
+    { title: "X", data: X0, subtitle: `${m}×${r}` },
+    { title: "Y", data: Y0, subtitle: `${n}×${r}` },
   ]});
-  steps.push({ type: "arrow", label: "Начальное произведение: X·Yᵀ", op: "multiply", data: { type: "matrix_product", leftLabel: "X", left: X, rightLabel: "Yᵀ", right: Yt, resultLabel: "X·Yᵀ", result: XYtInit } });
+  steps.push({ type: "arrow", label: "Начальное произведение: X·Yᵀ", op: "multiply", data: { type: "matrix_product", leftLabel: "X", left: X0, rightLabel: "Yᵀ", right: Y0t, resultLabel: "X·Yᵀ", result: XYtInit } });
   steps.push({ type: "matrix", id: "XYtInit", title: "X·Yᵀ (начало)", data: XYtInit, scale: scaleA });
   if (history.length > 1) {
-    steps.push({ type: "arrow", label: "Итерации ALS", op: "multiply", data: { type: "iteration_history", history, scale: scaleA, label: "Итерация ALS" } });
+    steps.push({ type: "iteration_viewer", id: "iters", label: "Итерации ALS", history, matrixLabels: ["X", "Y"] });
   }
   steps.push({ type: "arrow", label: `Финальные X и Y после ${cappedIters} итераций`, op: "multiply", data: { type: "iteration_note", text: `После ${cappedIters} итераций попеременных наименьших квадратов X и Y сходятся.`, matrices: [{ label: "X", matrix: X }, { label: "Yᵀ", matrix: transpose(Y) }] } });
   steps.push({ type: "matrices_row", id: "finalFactors", matrices: [
@@ -227,7 +231,6 @@ export function generatePipeline(algo, A, k, iters) {
 
 function renderMatrixStep(step) {
   const wrap = document.createElement("div");
-  wrap.className = "vis-step__content";
   const scale = step.scale || minMax(step.data);
   renderMatrixBlock(wrap, step.title, step.data, { scale, subtitle: step.subtitle });
   return wrap;
@@ -235,14 +238,16 @@ function renderMatrixStep(step) {
 
 function renderMatricesRowStep(step) {
   const wrap = document.createElement("div");
-  wrap.className = "vis-matrices-row";
+  const inner = document.createElement("div");
+  inner.className = "vis-matrices-row";
   for (const m of step.matrices) {
     const block = document.createElement("div");
     block.className = "vis-matrix-inline";
     const scale = m.scale || minMax(m.data);
     renderMatrixBlock(block, m.title, m.data, { scale, subtitle: m.subtitle });
-    wrap.appendChild(block);
+    inner.appendChild(block);
   }
+  wrap.appendChild(inner);
   return wrap;
 }
 
@@ -271,7 +276,7 @@ function renderNormsStep(step) {
   colDiv.className = "vis-norms__group";
   const colTitle = document.createElement("div");
   colTitle.className = "vis-norms__title";
-  colTitle.textContent = "Нормы столбцов";
+  colTitle.textContent = "Квадраты норм столбцов";
   colDiv.appendChild(colTitle);
   const maxCol = Math.max(...step.colNorms, 1e-12);
   for (let j = 0; j < step.colNorms.length; j++) {
@@ -297,7 +302,7 @@ function renderNormsStep(step) {
   rowDiv.className = "vis-norms__group";
   const rowTitle = document.createElement("div");
   rowTitle.className = "vis-norms__title";
-  rowTitle.textContent = "Нормы строк";
+  rowTitle.textContent = "Квадраты норм строк";
   rowDiv.appendChild(rowTitle);
   const maxRow = Math.max(...step.rowNorms, 1e-12);
   for (let i = 0; i < step.rowNorms.length; i++) {
@@ -327,64 +332,205 @@ function renderErrorStep(step) {
   wrap.className = "vis-error";
   const err = diff(step.A, step.Ahat);
   const fn = frobNorm(err);
-  const pct = fn / (frobNorm(step.A) + 1e-12) * 100;
-  wrap.innerHTML = `
-    <div class="vis-error__metric">
-      <span class="vis-error__key">Относительная ошибка:</span>
-      <span class="vis-error__val">${pct.toFixed(2)}%</span>
-    </div>
-    <div class="vis-error__metric">
-      <span class="vis-error__key">Frobenius норма:</span>
-      <span class="vis-error__val">${fn.toFixed(4)}</span>
-    </div>
-  `;
+  const fnA = frobNorm(step.A);
+  const pct = fn / (fnA + 1e-12) * 100;
 
-  // Visual scale bar
-  const scaleWrap = document.createElement("div");
-  scaleWrap.className = "vis-error__scale";
+  const metric1 = document.createElement("div");
+  metric1.className = "vis-error__metric";
+  metric1.innerHTML = `<span class="vis-error__key">Относительная ошибка:</span><span class="vis-error__value">${pct.toFixed(2)}%</span>`;
+  wrap.appendChild(metric1);
+
+  const barWrap = document.createElement("div");
+  barWrap.className = "vis-error__bar";
+  const barFill = document.createElement("div");
+  barFill.className = "vis-error__bar-fill";
+  const hue = Math.max(0, Math.min(120, 120 - pct * 1.2));
+  barFill.style.width = Math.min(pct, 100) + "%";
+  barFill.style.background = `hsl(${hue}, 80%, 50%)`;
+  barWrap.appendChild(barFill);
+  wrap.appendChild(barWrap);
+
+  const metric2 = document.createElement("div");
+  metric2.className = "vis-error__metric";
+  metric2.innerHTML = `<span class="vis-error__key">Frobenius:</span><span class="vis-error__value">${fn.toFixed(4)}</span>`;
+  wrap.appendChild(metric2);
+
+  return wrap;
+}
+
+function renderEditorStep(step) {
+  const wrap = document.createElement("div");
+  const A = step.A || step.data;
+  const onChange = step.onChange;
+
+  const head = document.createElement("div");
+  head.style.cssText = "display:flex;align-items:center;gap:0.35rem;margin-bottom:0.2rem;flex-wrap:wrap;width:100%";
+  const title = document.createElement("h3");
+  title.style.cssText = "margin:0;font-size:0.82rem;color:var(--text)";
+  title.textContent = step.title || "A";
+  head.appendChild(title);
+  const subtitle = document.createElement("span");
+  subtitle.style.cssText = "font-size:0.62rem;color:var(--muted)";
+  subtitle.textContent = step.subtitle || "Исходная";
+  head.appendChild(subtitle);
+  const normsMini = document.createElement("div");
+  normsMini.style.cssText = "margin-left:auto;display:flex;align-self:center";
+  renderRowColNorms(normsMini, A);
+  head.appendChild(normsMini);
+  wrap.appendChild(head);
+
   const scaleBar = document.createElement("div");
-  scaleBar.style.cssText = "height:10px;border-radius:5px;background:linear-gradient(to right, #4ade80, #a3e635, #facc15, #fb923c, #ef4444);position:relative;overflow:hidden";
-  const marker = document.createElement("div");
-  const pos = Math.min(1, Math.max(0, pct / 50));
-  marker.style.cssText = `position:absolute;top:-3px;left:${pos * 100}%;width:4px;height:16px;background:#fff;border-radius:2px;transform:translateX(-50%);box-shadow:0 0 6px rgba(255,255,255,0.8);transition:left 0.4s ease`;
-  scaleBar.appendChild(marker);
-  scaleWrap.appendChild(scaleBar);
+  scaleBar.className = "vis-scale-bar";
+  const scaleGrad = document.createElement("div");
+  scaleGrad.className = "vis-scale-gradient";
+  const scaleLabels = document.createElement("div");
+  scaleLabels.className = "vis-scale-labels";
+  scaleLabels.innerHTML = `<span>мин</span><span>макс</span>`;
+  scaleBar.appendChild(scaleGrad);
+  scaleBar.appendChild(scaleLabels);
+  wrap.appendChild(scaleBar);
 
-  const labelsRow = document.createElement("div");
-  labelsRow.style.cssText = "display:flex;justify-content:space-between;font-size:0.6rem;color:var(--muted);margin-top:0.15rem";
-  labelsRow.innerHTML = `<span>отлично<br><span style="font-size:0.5rem;opacity:0.6">0–1%</span></span><span>хорошо<br><span style="font-size:0.5rem;opacity:0.6">1–5%</span></span><span>удовл.<br><span style="font-size:0.5rem;opacity:0.6">5–15%</span></span><span>плохо<br><span style="font-size:0.5rem;opacity:0.6">15–30%</span></span><span>критично<br><span style="font-size:0.5rem;opacity:0.6">&gt;30%</span></span>`;
-  scaleWrap.appendChild(labelsRow);
-  wrap.appendChild(scaleWrap);
+  const editorHost = document.createElement("div");
+  editorHost.className = "vis-editor-host";
+  renderMatrixEditor(editorHost, A, onChange);
+  wrap.appendChild(editorHost);
+
+  const sizeRow = document.createElement("div");
+  sizeRow.className = "vis-size-row";
+  const rowInput = document.createElement("input");
+  rowInput.type = "number";
+  rowInput.min = 2;
+  rowInput.max = 10;
+  rowInput.value = A.length;
+  rowInput.style.cssText = "width:44px;font-size:0.72rem;padding:0.12rem 0.2rem";
+  const colInput = document.createElement("input");
+  colInput.type = "number";
+  colInput.min = 2;
+  colInput.max = 10;
+  colInput.value = A[0].length;
+  colInput.style.cssText = "width:44px;font-size:0.72rem;padding:0.12rem 0.2rem";
+  const sizeLabel = document.createElement("span");
+  sizeLabel.className = "vis-size-label";
+  sizeLabel.textContent = "Размер";
+  const applySize = document.createElement("button");
+  applySize.className = "vis-size-btn";
+  applySize.textContent = "Применить";
+  applySize.addEventListener("click", () => {
+    const newM = Math.max(2, Math.min(10, Number(rowInput.value) || 2));
+    const newN = Math.max(2, Math.min(10, Number(colInput.value) || 2));
+    const newA = zeros(newM, newN);
+    for (let i = 0; i < Math.min(newM, A.length); i++)
+      for (let j = 0; j < Math.min(newN, A[0].length); j++)
+        newA[i][j] = A[i][j];
+    if (onChange) onChange(newA);
+  });
+  sizeRow.appendChild(sizeLabel);
+  sizeRow.appendChild(rowInput);
+  sizeRow.appendChild(document.createTextNode("×"));
+  sizeRow.appendChild(colInput);
+  sizeRow.appendChild(applySize);
+  wrap.appendChild(sizeRow);
+
+  return wrap;
+}
+
+function renderIterationViewerStep(step) {
+  const history = step.history;
+  const labels = step.matrixLabels || ["W", "H"];
+  const isNmf = labels[0] === "W";
+  const maxFrob = Math.max(...history.map(h => h.frob), 1e-12);
+  const totalFrames = history.length;
+  const wrap = document.createElement("div");
+
+  // Title
+  const title = document.createElement("div");
+  title.className = "vis-iterview__title";
+  title.textContent = step.label || "Итерации";
+  wrap.appendChild(title);
+
+  // Info line
+  const info = document.createElement("div");
+  info.className = "vis-iterview__info";
+  wrap.appendChild(info);
+
+  // Matrix hosts side by side
+  const row = document.createElement("div");
+  row.className = "vis-iterview__row";
+  const host1 = document.createElement("div");
+  const host2 = document.createElement("div");
+  row.appendChild(host1);
+  row.appendChild(host2);
+  wrap.appendChild(row);
+
+  // Error bar
+  const barWrap = document.createElement("div");
+  barWrap.className = "vis-iterview__bar";
+  const barFill = document.createElement("div");
+  barFill.className = "vis-iterview__bar-fill";
+  barWrap.appendChild(barFill);
+  wrap.appendChild(barWrap);
+
+  function renderFrame(n) {
+    const entry = history[n];
+    const frob = entry.frob;
+    const pct = Math.min(frob / maxFrob * 100, 100);
+    info.innerHTML = `<b>${labels[0]}</b>, <b>${labels[1]}</b> &nbsp;итерация <b>${entry.i}</b> &nbsp;|&nbsp; ошибка: ${frob.toFixed(4)}`;
+    barFill.style.width = pct + "%";
+    barFill.style.background = `hsl(${120 - pct * 1.2}, 80%, 50%)`;
+
+    host1.innerHTML = "";
+    host2.innerHTML = "";
+    const mat1 = isNmf ? entry.W : entry.X;
+    const mat2 = isNmf ? entry.H : entry.Y;
+    renderMatrixBlock(host1, labels[0], mat1, { scale: minMax(mat1) });
+    renderMatrixBlock(host2, labels[1], mat2, { scale: minMax(mat2) });
+  }
+
+  createFrameSlider(wrap, totalFrames, renderFrame, { speed: 400 });
   return wrap;
 }
 
 function renderStep(container, step, index) {
   const stepEl = document.createElement("div");
   stepEl.className = "vis-step";
-  stepEl.style.animationDelay = `${index * 0.15}s`;
 
-  let content;
-  switch (step.type) {
-    case "matrix":
-      content = renderMatrixStep(step);
-      break;
-    case "matrices_row":
-      content = renderMatricesRowStep(step);
-      break;
-    case "eigenvalues":
-      content = renderEigenvaluesStep(step);
-      break;
-    case "norms":
-      content = renderNormsStep(step);
-      break;
-    case "error":
-      content = renderErrorStep(step);
-      break;
-    default:
-      content = document.createElement("div");
-      content.textContent = "Unknown step type";
+  let inner;
+  if (step.editable && step.type === "matrix") {
+    inner = renderEditorStep(step);
+  } else {
+    switch (step.type) {
+      case "matrix":
+        inner = renderMatrixStep(step);
+        break;
+      case "matrices_row":
+        inner = renderMatricesRowStep(step);
+        break;
+      case "eigenvalues":
+        inner = renderEigenvaluesStep(step);
+        break;
+      case "norms":
+        inner = renderNormsStep(step);
+        break;
+      case "error":
+        inner = renderErrorStep(step);
+        break;
+      case "iteration_viewer":
+        inner = renderIterationViewerStep(step);
+        break;
+      case "arrow":
+        inner = document.createElement("div");
+        inner.className = "vis-arrow-note";
+        inner.textContent = step.label || "";
+        break;
+      default:
+        inner = document.createElement("div");
+        inner.textContent = "Unknown step type";
+    }
   }
 
+  const content = document.createElement("div");
+  content.className = "vis-step__content";
+  content.appendChild(inner);
   stepEl.appendChild(content);
   container.appendChild(stepEl);
   return stepEl;
@@ -394,27 +540,27 @@ function renderArrow(container, steps, arrowIndex) {
   const arrowStep = steps[arrowIndex];
   const arrowEl = document.createElement("div");
   arrowEl.className = "vis-arrow";
-  arrowEl.style.animationDelay = `${arrowIndex * 0.15 + 0.1}s`;
+  arrowEl.style.animationDelay = `0s`;
 
   const color = opColor(arrowStep.op);
 
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("class", "vis-arrow__svg");
-  svg.setAttribute("viewBox", "0 0 60 50");
+  svg.setAttribute("viewBox", "0 0 60 30");
   svg.setAttribute("preserveAspectRatio", "none");
 
   const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-  line.setAttribute("x1", "6");
-  line.setAttribute("y1", "25");
+  line.setAttribute("x1", "4");
+  line.setAttribute("y1", "15");
   line.setAttribute("x2", "46");
-  line.setAttribute("y2", "25");
+  line.setAttribute("y2", "15");
   line.setAttribute("stroke", color);
-  line.setAttribute("stroke-width", "2.5");
+  line.setAttribute("stroke-width", "2");
   line.setAttribute("stroke-linecap", "round");
   line.setAttribute("class", "vis-arrow__line");
 
   const head = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-  head.setAttribute("points", "42,20 52,25 42,30");
+  head.setAttribute("points", "42,10 52,15 42,20");
   head.setAttribute("fill", color);
   head.setAttribute("class", "vis-arrow__head");
 
@@ -422,9 +568,9 @@ function renderArrow(container, steps, arrowIndex) {
   svg.appendChild(head);
 
   const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-  dot.setAttribute("cx", "6");
-  dot.setAttribute("cy", "25");
-  dot.setAttribute("r", "3.5");
+  dot.setAttribute("cx", "4");
+  dot.setAttribute("cy", "15");
+  dot.setAttribute("r", "3");
   dot.setAttribute("fill", color);
   dot.setAttribute("class", "vis-arrow__dot");
   svg.appendChild(dot);
@@ -444,6 +590,103 @@ function renderArrow(container, steps, arrowIndex) {
 
   container.appendChild(arrowEl);
   return arrowEl;
+}
+
+// ── Frame slider for scrubbing animations ──
+
+function createFrameSlider(body, totalFrames, renderFrame, opts = {}) {
+  if (totalFrames <= 1) {
+    renderFrame(0);
+    return null;
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "frame-slider";
+
+  const row = document.createElement("div");
+  row.style.cssText = "display:flex;align-items:center;gap:0.4rem;padding:0.4rem 0.3rem;flex-wrap:wrap";
+
+  const playBtn = document.createElement("button");
+  playBtn.textContent = "▶";
+  playBtn.title = "Воспроизвести";
+  playBtn.style.cssText = "padding:0.2rem 0.5rem;font-size:0.82rem;font-weight:600;cursor:pointer;border:1px solid var(--accent);border-radius:6px;background:rgba(91,156,246,0.15);color:var(--accent);min-width:2.2rem";
+
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = 0;
+  slider.max = totalFrames - 1;
+  slider.value = 0;
+  slider.style.cssText = "flex:1;min-width:80px;accent-color:var(--accent)";
+
+  const frameLabel = document.createElement("span");
+  frameLabel.style.cssText = "font-size:0.72rem;color:var(--muted);font-family:monospace;min-width:5rem;text-align:center";
+  frameLabel.textContent = `0 / ${totalFrames - 1}`;
+
+  const resetBtn = document.createElement("button");
+  resetBtn.textContent = "⟳";
+  resetBtn.title = "Сброс";
+  resetBtn.style.cssText = "padding:0.2rem 0.5rem;font-size:0.82rem;font-weight:600;cursor:pointer;border:1px solid var(--border);border-radius:6px;background:rgba(255,255,255,0.05);color:var(--muted);min-width:2.2rem";
+
+  row.appendChild(playBtn);
+  row.appendChild(slider);
+  row.appendChild(frameLabel);
+  row.appendChild(resetBtn);
+  wrap.appendChild(row);
+
+  let playing = false;
+  let interval = null;
+  let currentFrame = 0;
+
+  function setFrame(n) {
+    currentFrame = n;
+    slider.value = n;
+    frameLabel.textContent = `${n} / ${totalFrames - 1}`;
+    renderFrame(n);
+  }
+
+  slider.addEventListener("input", () => {
+    if (playing) {
+      playing = false;
+      clearInterval(interval);
+      playBtn.textContent = "▶";
+    }
+    setFrame(Number(slider.value));
+  });
+
+  playBtn.addEventListener("click", () => {
+    if (playing) {
+      playing = false;
+      clearInterval(interval);
+      playBtn.textContent = "▶";
+    } else {
+      playing = true;
+      playBtn.textContent = "⏸";
+      const speed = opts.speed || 400;
+      interval = setInterval(() => {
+        if (currentFrame >= totalFrames - 1) {
+          playing = false;
+          clearInterval(interval);
+          playBtn.textContent = "▶";
+          return;
+        }
+        setFrame(currentFrame + 1);
+      }, speed);
+    }
+  });
+
+  resetBtn.addEventListener("click", () => {
+    if (playing) {
+      playing = false;
+      clearInterval(interval);
+      playBtn.textContent = "▶";
+    }
+    setFrame(0);
+  });
+
+  body.appendChild(wrap);
+  setFrame(0);
+
+  return { setFrame, currentFrame: () => currentFrame, slider, playBtn };
 }
 
 // ── Arrow detail — live animated sandbox ──
@@ -476,59 +719,27 @@ function makeLabel(text) {
   return el;
 }
 
-function animateCellFill(host, finalM, rows, cols, onDone) {
-  const total = rows * cols;
-  const working = zeros(rows, cols);
-  const s = minMax(finalM);
-  let idx = 0;
-  let iv;
 
-  function tick() {
-    if (idx >= total) { clearInterval(iv); if (onDone) onDone(); return; }
-    const ci = Math.floor(idx / cols);
-    const cj = idx % cols;
-    working[ci][cj] = finalM[ci][cj];
-    idx++;
-    host.innerHTML = "";
-    renderMatrixBlock(host, "", working, { scale: s });
-    const cells = host.querySelectorAll(".cell");
-    const justFilled = idx - 1;
-    if (cells[justFilled]) {
-      cells[justFilled].style.boxShadow = "inset 0 0 0 3px var(--accent), 0 0 18px rgba(91,156,246,0.6)";
-      cells[justFilled].style.transition = "box-shadow 0.25s, transform 0.15s";
-      cells[justFilled].style.transform = "scale(1.12)";
-      setTimeout(() => { if (cells[justFilled]) cells[justFilled].style.transform = "scale(1)"; }, 180);
-    }
-  }
-
-  function start() {
-    idx = 0;
-    for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) working[i][j] = 0;
-    clearInterval(iv);
-    host.innerHTML = "";
-    renderMatrixBlock(host, "", working, { scale: s });
-    iv = setInterval(tick, 420);
-  }
-
-  start();
-  return { restart: start };
-}
-
-function addRepeatBtn(container, onRestart) {
-  const btn = document.createElement("button");
-  btn.className = "live-repeat";
-  btn.textContent = "⟳ Повторить";
-  btn.style.cssText = "margin-top:0.6rem;padding:0.3rem 0.9rem;font-size:0.78rem;font-weight:600;color:var(--accent);background:rgba(91,156,246,0.12);border:1px solid var(--accent);border-radius:8px;cursor:pointer;transition:background 0.15s";
-  btn.addEventListener("mouseenter", () => btn.style.background = "rgba(91,156,246,0.25)");
-  btn.addEventListener("mouseleave", () => btn.style.background = "rgba(91,156,246,0.12)");
-  btn.addEventListener("click", () => { if (onRestart) onRestart(); });
-  container.appendChild(btn);
-}
 
 function liveProduct(body, data) {
   const A = data.left, B = data.right, R = data.result;
   const mA = A.length, p = A[0].length, nB = B[0].length;
   const sA = minMax(A), sB = minMax(B), sR = minMax(R);
+
+  const cellData = [];
+  for (let i = 0; i < mA; i++) {
+    for (let j = 0; j < nB; j++) {
+      let sum = 0;
+      const parts = [];
+      for (let k = 0; k < p; k++) {
+        const term = A[i][k] * B[k][j];
+        sum += term;
+        parts.push(`${A[i][k].toFixed(2)}·${B[k][j].toFixed(2)}`);
+      }
+      cellData.push({ i, j, value: sum, formula: parts.join(" + ") });
+    }
+  }
+  const totalFrames = cellData.length + 1;
 
   const row = document.createElement("div");
   row.style.cssText = "display:flex;gap:0.5rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:0.5rem";
@@ -575,126 +786,52 @@ function liveProduct(body, data) {
   info.style.cssText = "font-size:0.75rem;color:var(--muted);text-align:center";
   body.appendChild(info);
 
-  let abort = false, paused = false, resumeFn = null, timeoutId = null;
-  let ciState = 0, cjState = 0;
-  let cellK = 0, cellSum = 0;
+  const allCellsA = hostA.querySelectorAll(".cell");
+  const allCellsB = hostB.querySelectorAll(".cell");
 
-  function updateCell(rowIdx, colIdx, val) {
-    const cells = rHost.querySelectorAll(".cell");
-    const idx = rowIdx * nB + colIdx;
-    if (!cells[idx]) return;
-    const t = sR.mx > sR.mn ? (val - sR.mn) / (sR.mx - sR.mn) : 0.5;
-    const c = viridis(t);
-    cells[idx].style.background = viridisRgb(c);
-    cells[idx].style.color = t > 0.6 ? "#080c14" : "#fff";
-    cells[idx].textContent = val.toFixed(2);
-  }
-
-  function schedule(fn, delay, ...args) {
-    timeoutId = setTimeout(() => {
-      if (abort) return;
-      if (paused) { resumeFn = () => schedule(fn, 1, ...args); return; }
-      fn(...args);
-    }, delay);
-  }
-
-  function computeCell(i, j, cb) {
-    if (abort) { cb(); return; }
-    let sum = 0;
-    let k = 0;
-    const cellsA = hostA.querySelectorAll(".cell");
-    const cellsB = hostB.querySelectorAll(".cell");
-    const rIdx = i * nB + j;
-
-    function unhighlight() {
-      for (let kk = 0; kk < p; kk++) {
-        const aIdx = i * p + kk;
-        const bIdx = kk * nB + j;
-        if (cellsA[aIdx]) { cellsA[aIdx].style.boxShadow = ""; cellsA[aIdx].style.outline = ""; }
-        if (cellsB[bIdx]) { cellsB[bIdx].style.boxShadow = ""; cellsB[bIdx].style.outline = ""; }
-      }
-    }
-
-    function stepK() {
-      if (abort) { cb(); return; }
-      if (k >= p) {
-        unhighlight();
-        const cellsR = rHost.querySelectorAll(".cell");
-        if (cellsR[rIdx]) {
-          cellsR[rIdx].style.boxShadow = "inset 0 0 0 3px var(--accent), 0 0 18px rgba(91,156,246,0.6)";
-          setTimeout(() => { if (cellsR[rIdx]) cellsR[rIdx].style.boxShadow = ""; }, 600);
+  function renderFrame(n) {
+    const cellsA = allCellsA;
+    const cellsB = allCellsB;
+    const cellsR = rHost.querySelectorAll(".cell");
+    for (let ci = 0; ci < mA; ci++) {
+      for (let cj = 0; cj < nB; cj++) {
+        const idx = ci * nB + cj;
+        if (!cellsR[idx]) continue;
+        if (idx < n) {
+          const cd = cellData[idx];
+          working[ci][cj] = cd.value;
+          const t = sR.mx > sR.mn ? (cd.value - sR.mn) / (sR.mx - sR.mn) : 0.5;
+          const c = viridis(t);
+          cellsR[idx].style.background = viridisRgb(c);
+          cellsR[idx].style.color = t > 0.6 ? "#080c14" : "#fff";
+          cellsR[idx].textContent = cd.value.toFixed(2);
         }
-        trace.innerHTML = `${data.resultLabel}<sub>${i}${j}</sub> = ${trace.dataset.expr || ""} = <b>${sum.toFixed(2)}</b>`;
-        cellSum = sum; cellK = k;
-        cb();
-        return;
+        cellsR[idx].style.boxShadow = "";
       }
-      const aIdx = i * p + k;
-      const bIdx = k * nB + j;
-      if (cellsA[aIdx]) { cellsA[aIdx].style.boxShadow = "inset 0 0 0 3px var(--good), 0 0 14px rgba(74,222,128,0.5)"; }
-      if (cellsB[bIdx]) { cellsB[bIdx].style.boxShadow = "inset 0 0 0 3px var(--good), 0 0 14px rgba(74,222,128,0.5)"; }
-      const term = A[i][k] * B[k][j];
-      sum += term;
-      const expr = trace.dataset.expr || "";
-      const newExpr = expr + (k === 0 ? "" : " + ") + `${A[i][k].toFixed(2)}<sub>[${i}][${k}]</sub>·${B[k][j].toFixed(2)}<sub>[${k}][${j}]</sub>`;
-      trace.dataset.expr = newExpr;
-      trace.innerHTML = `${data.resultLabel}<sub>${i}${j}</sub> = ${newExpr}`;
-      info.textContent = `Шаг ${k+1}/${p}: ${data.leftLabel}[${i}][${k}]×${data.rightLabel}[${k}][${j}] = ${A[i][k].toFixed(2)} × ${B[k][j].toFixed(2)} = ${term.toFixed(2)} (сумма: ${sum.toFixed(2)})`;
-      cellK = ++k; cellSum = sum;
-      schedule(stepK, 500);
     }
-    trace.innerHTML = "";
-    trace.dataset.expr = "";
-    cellK = 0; cellSum = 0;
-    stepK();
-  }
-
-  function fillNext() {
-    if (abort) return;
-    if (ciState >= mA) { info.textContent = `Готово: ${data.resultLabel}`; return; }
-    const i = ciState, j = cjState;
-    computeCell(i, j, () => {
-      updateCell(i, j, cellSum);
-      working[i][j] = cellSum;
-      cjState++;
-      if (cjState >= nB) { cjState = 0; ciState++; }
-      schedule(fillNext, 300);
-    });
-  }
-
-  function start() {
-    ciState = 0; cjState = 0; abort = false; paused = false; resumeFn = null;
-    if (timeoutId) clearTimeout(timeoutId);
-    for (let i = 0; i < mA; i++) for (let j = 0; j < nB; j++) working[i][j] = 0;
-    rHost.innerHTML = "";
-    renderMatrixBlock(rHost, "", working, { scale: sR });
-    trace.innerHTML = "";
-    info.textContent = "";
-    fillNext();
-  }
-
-  const pauseBtn = document.createElement("button");
-  pauseBtn.textContent = "⏸ Пауза";
-  pauseBtn.style.cssText = "margin:0.5rem 0.3rem 0;padding:0.3rem 0.9rem;font-size:0.78rem;font-weight:600;color:var(--accent);background:rgba(91,156,246,0.12);border:1px solid var(--accent);border-radius:8px;cursor:pointer";
-  pauseBtn.addEventListener("click", () => {
-    if (!paused) {
-      paused = true;
-      pauseBtn.textContent = "▶ Продолжить";
+    for (let ci = 0; ci < mA * p; ci++) cellsA[ci] ? cellsA[ci].style.boxShadow = "" : 0;
+    for (let ci = 0; ci < p * nB; ci++) cellsB[ci] ? cellsB[ci].style.boxShadow = "" : 0;
+    if (n > 0) {
+      const last = cellData[n - 1];
+      const lastIdx = (n - 1);
+      if (cellsR[lastIdx]) {
+        cellsR[lastIdx].style.boxShadow = "inset 0 0 0 3px var(--accent), 0 0 18px rgba(91,156,246,0.6)";
+      }
+      for (let k = 0; k < p; k++) {
+        const aIdx = last.i * p + k;
+        if (cellsA[aIdx]) cellsA[aIdx].style.boxShadow = "inset 0 0 0 3px var(--good)";
+        const bIdx = k * nB + last.j;
+        if (cellsB[bIdx]) cellsB[bIdx].style.boxShadow = "inset 0 0 0 3px var(--bad)";
+      }
+      trace.innerHTML = `${data.resultLabel}<sub>${last.i}${last.j}</sub> = ${last.formula} = <b>${last.value.toFixed(2)}</b>`;
+      info.textContent = `(${last.i},${last.j}): Σ = ${last.value.toFixed(2)}`;
     } else {
-      paused = false;
-      pauseBtn.textContent = "⏸ Пауза";
-      const fn = resumeFn; resumeFn = null;
-      if (fn) fn();
+      trace.innerHTML = "";
+      info.textContent = "";
     }
-  });
+  }
 
-  const btnRow = document.createElement("div");
-  btnRow.style.cssText = "display:flex;gap:0.3rem;justify-content:center;flex-wrap:wrap";
-  btnRow.appendChild(pauseBtn);
-  addRepeatBtn(btnRow, () => { paused = false; pauseBtn.textContent = "⏸ Пауза"; start(); });
-  body.appendChild(btnRow);
-
-  start();
+  createFrameSlider(body, totalFrames, renderFrame, { speed: 300 });
 }
 
 function liveTriple(body, data) {
@@ -704,217 +841,254 @@ function liveTriple(body, data) {
   const temp = dot(A, B);
   const sT = minMax(temp);
 
-  let abort = false, paused = false, resumeFn = null, timeoutId = null;
-
-  function updateCell(host, idx, val, scale) {
-    const cells = host.querySelectorAll(".cell");
-    if (!cells[idx]) return;
-    const t = scale.mx > scale.mn ? (val - scale.mn) / (scale.mx - scale.mn) : 0.5;
-    const c = viridis(t);
-    cells[idx].style.background = viridisRgb(c);
-    cells[idx].style.color = t > 0.6 ? "#080c14" : "#fff";
-    cells[idx].textContent = val.toFixed(2);
-  }
-
-  function makeProduct(hostA, hostB, hostR, hostLabel, leftM, rightM, rows, mid, cols, phaseLabel, scaleR, working, onComplete) {
-    const phase = document.createElement("div");
-    phase.style.cssText = "font-size:0.82rem;color:var(--accent);font-weight:600;text-align:center;margin:0.3rem 0";
-    phase.textContent = phaseLabel;
-    body.appendChild(phase);
-
-    const row = document.createElement("div");
-    row.style.cssText = "display:flex;gap:0.5rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:0.3rem";
-    row.appendChild(hostA);
-    row.appendChild(makeOpSign("·"));
-    row.appendChild(hostB);
-    row.appendChild(makeOpSign("="));
-    const wrapR = document.createElement("div");
-    wrapR.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-    const lblR = document.createElement("div");
-    lblR.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-    lblR.textContent = hostLabel;
-    wrapR.appendChild(lblR);
-    wrapR.appendChild(hostR);
-    row.appendChild(wrapR);
-    body.appendChild(row);
-
-    const trace = document.createElement("div");
-    trace.style.cssText = "font-size:0.85rem;color:var(--text);text-align:center;font-family:monospace;min-height:2rem;padding:0.3rem;background:rgba(0,0,0,0.12);border-radius:6px;margin:0.3rem 0";
-    body.appendChild(trace);
-
-    const info = document.createElement("div");
-    info.style.cssText = "font-size:0.75rem;color:var(--muted);text-align:center;min-height:1.2rem";
-    body.appendChild(info);
-
-    let cellSum = 0, cellK = 0;
-    let ci = 0, cj = 0;
-
-    function schedule(fn, delay, ...args) {
-      timeoutId = setTimeout(() => {
-        if (abort) return;
-        if (paused) { resumeFn = () => schedule(fn, 1, ...args); return; }
-        fn(...args);
-      }, delay);
-    }
-
-    function computeCell(i, j, cb) {
-      if (abort) { cb(); return; }
-      let sum = 0; let k = 0;
-      const cellsA = hostA.querySelectorAll(".cell");
-      const cellsB = hostB.querySelectorAll(".cell");
-      const rIdx = i * cols + j;
-
-      function unhighlight() {
-        for (let kk = 0; kk < mid; kk++) {
-          const aIdx = i * mid + kk, bIdx = kk * cols + j;
-          if (cellsA[aIdx]) cellsA[aIdx].style.boxShadow = "";
-          if (cellsB[bIdx]) cellsB[bIdx].style.boxShadow = "";
-        }
-      }
-
-      function stepK() {
-        if (abort) { cb(); return; }
-        if (k >= mid) {
-          unhighlight();
-          const cellsR = hostR.querySelectorAll(".cell");
-          if (cellsR[rIdx]) { cellsR[rIdx].style.boxShadow = "inset 0 0 0 3px var(--accent), 0 0 14px rgba(91,156,246,0.6)"; setTimeout(() => { if (cellsR[rIdx]) cellsR[rIdx].style.boxShadow = ""; }, 600); }
-          trace.innerHTML = `${hostLabel}<sub>${i}${j}</sub> = ${trace.dataset.expr || ""} = <b>${sum.toFixed(2)}</b>`;
-          cellSum = sum; cellK = k;
-          cb();
-          return;
-        }
-        const aIdx = i * mid + k, bIdx = k * cols + j;
-        if (cellsA[aIdx]) cellsA[aIdx].style.boxShadow = "inset 0 0 0 3px var(--good), 0 0 14px rgba(74,222,128,0.5)";
-        if (cellsB[bIdx]) cellsB[bIdx].style.boxShadow = "inset 0 0 0 3px var(--good), 0 0 14px rgba(74,222,128,0.5)";
-        const term = leftM[i][k] * rightM[k][j];
+  const cellData1 = [];
+  for (let i = 0; i < mA; i++) {
+    for (let j = 0; j < q; j++) {
+      let sum = 0;
+      const parts = [];
+      for (let k = 0; k < p; k++) {
+        const term = A[i][k] * B[k][j];
         sum += term;
-        const expr = trace.dataset.expr || "";
-        const newExpr = expr + (k === 0 ? "" : " + ") + `${leftM[i][k].toFixed(2)}<sub>[${i}][${k}]</sub>·${rightM[k][j].toFixed(2)}<sub>[${k}][${j}]</sub>`;
-        trace.dataset.expr = newExpr;
-        trace.innerHTML = `${hostLabel}<sub>${i}${j}</sub> = ${newExpr}`;
-        info.textContent = `Шаг ${k+1}/${mid}: [${i}][${k}]×[${k}][${j}] = ${leftM[i][k].toFixed(2)} × ${rightM[k][j].toFixed(2)} = ${term.toFixed(2)} (сумма: ${sum.toFixed(2)})`;
-        cellK = ++k; cellSum = sum;
-        schedule(stepK, 500);
+        parts.push(`${A[i][k].toFixed(2)}·${B[k][j].toFixed(2)}`);
       }
-      trace.innerHTML = ""; trace.dataset.expr = ""; cellK = 0; cellSum = 0;
-      stepK();
+      cellData1.push({ i, j, value: sum, formula: parts.join(" + ") });
     }
-
-    function fillNext() {
-      if (abort) return;
-      if (ci >= rows) { info.textContent = "Готово"; if (onComplete) onComplete(); return; }
-      const i = ci, j = cj;
-      computeCell(i, j, () => {
-        updateCell(hostR, i * cols + j, cellSum, scaleR);
-        if (working) working[i][j] = cellSum;
-        cj++;
-        if (cj >= cols) { cj = 0; ci++; }
-        schedule(fillNext, 300);
-      });
-    }
-    fillNext();
-
-    function resetState() { ci = 0; cj = 0; }
-    return { resetState };
   }
 
-  function buildAll() {
-    const wrapA1 = document.createElement("div");
-    wrapA1.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-    const lblA1 = document.createElement("div");
-    lblA1.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-    lblA1.textContent = data.aLabel;
-    wrapA1.appendChild(lblA1);
-    const hostA1 = document.createElement("div");
-    renderMatrixBlock(hostA1, "", A, { scale: sA });
-    wrapA1.appendChild(hostA1);
-
-    const wrapB1 = document.createElement("div");
-    wrapB1.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-    const lblB1 = document.createElement("div");
-    lblB1.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-    lblB1.textContent = data.bLabel;
-    wrapB1.appendChild(lblB1);
-    const hostB1 = document.createElement("div");
-    renderMatrixBlock(hostB1, "", B, { scale: sB });
-    wrapB1.appendChild(hostB1);
-
-    const working1 = zeros(mA, q);
-    const hostT = document.createElement("div");
-    renderMatrixBlock(hostT, "", working1, { scale: sT });
-
-    makeProduct(wrapA1, wrapB1, hostT, "U·Σ", A, B, mA, p, q, "Фаза 1: U · Σ → промежуточная", sT, working1, () => {
-      timeoutId = setTimeout(() => {
-        const wrapA2 = document.createElement("div");
-        wrapA2.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-        const lblA2 = document.createElement("div");
-        lblA2.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-        lblA2.textContent = "U·Σ";
-        wrapA2.appendChild(lblA2);
-        const hostA2 = document.createElement("div");
-        renderMatrixBlock(hostA2, "", temp, { scale: sT });
-        wrapA2.appendChild(hostA2);
-
-        const wrapB2 = document.createElement("div");
-        wrapB2.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
-        const lblB2 = document.createElement("div");
-        lblB2.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
-        lblB2.textContent = data.cLabel;
-        wrapB2.appendChild(lblB2);
-        const hostB2 = document.createElement("div");
-        renderMatrixBlock(hostB2, "", C, { scale: sC });
-        wrapB2.appendChild(hostB2);
-
-        const working2 = zeros(mA, nC);
-        const hostR2 = document.createElement("div");
-        renderMatrixBlock(hostR2, "", working2, { scale: sR });
-
-        makeProduct(wrapA2, wrapB2, hostR2, data.resultLabel, temp, C, mA, q, nC, "Фаза 2: (U·Σ) · Vᵀ → результат", sR, working2, null);
-      }, 400);
-    });
+  const kMax = Math.min(q, C.length);
+  const cellData2 = [];
+  for (let i = 0; i < mA; i++) {
+    for (let j = 0; j < nC; j++) {
+      let sum = 0;
+      const parts = [];
+      for (let k = 0; k < kMax; k++) {
+        const term = temp[i][k] * C[k][j];
+        sum += term;
+        parts.push(`${temp[i][k].toFixed(2)}·${C[k][j].toFixed(2)}`);
+      }
+      cellData2.push({ i, j, value: sum, formula: parts.join(" + ") });
+    }
   }
 
-  buildAll();
+  const phase1Len = cellData1.length;
+  const totalFrames = phase1Len + cellData2.length + 1;
 
-  const pauseBtn = document.createElement("button");
-  pauseBtn.textContent = "⏸ Пауза";
-  pauseBtn.style.cssText = "margin:0.5rem 0.3rem 0;padding:0.3rem 0.9rem;font-size:0.78rem;font-weight:600;color:var(--accent);background:rgba(91,156,246,0.12);border:1px solid var(--accent);border-radius:8px;cursor:pointer";
-  pauseBtn.addEventListener("click", () => {
-    if (!paused) {
-      paused = true;
-      pauseBtn.textContent = "▶ Продолжить";
+  // Phase 1: U · Σ → temp
+  const phase1Label = document.createElement("div");
+  phase1Label.style.cssText = "font-size:0.82rem;color:var(--accent);font-weight:600;text-align:center;margin:0.3rem 0";
+  phase1Label.textContent = "Фаза 1: U · Σ → промежуточная";
+  body.appendChild(phase1Label);
+
+  const row1 = document.createElement("div");
+  row1.style.cssText = "display:flex;gap:0.5rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:0.3rem";
+
+  const wrapA1 = document.createElement("div");
+  wrapA1.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
+  const lblA1 = document.createElement("div");
+  lblA1.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
+  lblA1.textContent = data.aLabel;
+  wrapA1.appendChild(lblA1);
+  const hostA1 = document.createElement("div");
+  renderMatrixBlock(hostA1, "", A, { scale: sA });
+  wrapA1.appendChild(hostA1);
+  row1.appendChild(wrapA1);
+  row1.appendChild(makeOpSign("·"));
+
+  const wrapB1 = document.createElement("div");
+  wrapB1.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
+  const lblB1 = document.createElement("div");
+  lblB1.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
+  lblB1.textContent = data.bLabel;
+  wrapB1.appendChild(lblB1);
+  const hostB1 = document.createElement("div");
+  renderMatrixBlock(hostB1, "", B, { scale: sB });
+  wrapB1.appendChild(hostB1);
+  row1.appendChild(wrapB1);
+  row1.appendChild(makeOpSign("="));
+
+  const hostT = document.createElement("div");
+  hostT.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
+  const lblT = document.createElement("div");
+  lblT.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
+  lblT.textContent = "U·Σ";
+  hostT.appendChild(lblT);
+  const rHostT = document.createElement("div");
+  const working1 = zeros(mA, q);
+  renderMatrixBlock(rHostT, "", working1, { scale: sT });
+  rHostT.dataset.rows = mA;
+  rHostT.dataset.cols = q;
+  rHostT.dataset.scale = JSON.stringify(sT);
+  hostT.appendChild(rHostT);
+  row1.appendChild(hostT);
+  body.appendChild(row1);
+
+  // Phase 2: temp · Vᵀ → result
+  const phase2Wrap = document.createElement("div");
+  phase2Wrap.style.cssText = "display:contents";
+  const phase2Label = document.createElement("div");
+  phase2Label.style.cssText = "font-size:0.82rem;color:var(--accent);font-weight:600;text-align:center;margin:0.3rem 0";
+  phase2Label.textContent = "Фаза 2: (U·Σ) · Vᵀ → результат";
+  phase2Wrap.appendChild(phase2Label);
+
+  const row2 = document.createElement("div");
+  row2.style.cssText = "display:flex;gap:0.5rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:0.3rem";
+
+  const hostA2 = document.createElement("div");
+  renderMatrixBlock(hostA2, "", temp, { scale: sT });
+  row2.appendChild(hostA2);
+  row2.appendChild(makeOpSign("·"));
+
+  const wrapB2 = document.createElement("div");
+  wrapB2.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
+  const lblB2 = document.createElement("div");
+  lblB2.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
+  lblB2.textContent = data.cLabel;
+  wrapB2.appendChild(lblB2);
+  const hostB2 = document.createElement("div");
+  renderMatrixBlock(hostB2, "", C, { scale: sC });
+  wrapB2.appendChild(hostB2);
+  row2.appendChild(wrapB2);
+  row2.appendChild(makeOpSign("="));
+
+  const hostR2 = document.createElement("div");
+  hostR2.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0.25rem";
+  const lblR2 = document.createElement("div");
+  lblR2.style.cssText = "font-size:0.78rem;font-weight:600;color:var(--text);text-align:center";
+  lblR2.textContent = data.resultLabel;
+  hostR2.appendChild(lblR2);
+  const rHostR2 = document.createElement("div");
+  const working2 = zeros(mA, nC);
+  renderMatrixBlock(rHostR2, "", working2, { scale: sR });
+  rHostR2.dataset.rows = mA;
+  rHostR2.dataset.cols = nC;
+  rHostR2.dataset.scale = JSON.stringify(sR);
+  hostR2.appendChild(rHostR2);
+  row2.appendChild(hostR2);
+  phase2Wrap.appendChild(row2);
+
+  const trace2 = document.createElement("div");
+  trace2.style.cssText = "font-size:0.85rem;color:var(--text);text-align:center;font-family:monospace;min-height:2rem;padding:0.3rem;background:rgba(0,0,0,0.12);border-radius:6px;margin:0.3rem 0";
+  phase2Wrap.appendChild(trace2);
+
+  const info2 = document.createElement("div");
+  info2.style.cssText = "font-size:0.75rem;color:var(--muted);text-align:center;min-height:1.2rem";
+  phase2Wrap.appendChild(info2);
+
+  body.appendChild(phase2Wrap);
+  phase2Wrap.style.display = "none";
+
+  // Trace/info for both phases
+  const trace1 = document.createElement("div");
+  trace1.style.cssText = "font-size:0.85rem;color:var(--text);text-align:center;font-family:monospace;min-height:2rem;padding:0.3rem;background:rgba(0,0,0,0.12);border-radius:6px;margin:0.3rem 0";
+  body.appendChild(trace1);
+
+  const info = document.createElement("div");
+  info.style.cssText = "font-size:0.75rem;color:var(--muted);text-align:center;min-height:1.2rem";
+  body.appendChild(info);
+
+  const cellsA1 = hostA1.querySelectorAll(".cell");
+  const cellsB1 = hostB1.querySelectorAll(".cell");
+
+  function fillHost(host, cellData, count) {
+    const cells = host.querySelectorAll(".cell");
+    const rows = parseInt(host.dataset.rows) || (cellData.length > 0 ? Math.max(...cellData.map(c => c.i)) + 1 : 1);
+    const cols = parseInt(host.dataset.cols) || (cellData.length > 0 ? Math.max(...cellData.map(c => c.j)) + 1 : 1);
+    const scale = host.dataset.scale ? JSON.parse(host.dataset.scale) : null;
+    for (let ci = 0; ci < cellData.length; ci++) {
+      const cd = cellData[ci];
+      const idx = cd.i * cols + cd.j;
+      if (!cells[idx]) continue;
+      if (ci < count) {
+        const t2 = scale && scale.mx > scale.mn ? (cd.value - scale.mn) / (scale.mx - scale.mn) : 0.5;
+        const c2 = viridis(t2);
+        cells[idx].style.background = viridisRgb(c2);
+        cells[idx].style.color = t2 > 0.6 ? "#080c14" : "#fff";
+        cells[idx].textContent = cd.value.toFixed(2);
+        cells[idx].style.boxShadow = ci === count - 1 ? "inset 0 0 0 3px var(--accent), 0 0 18px rgba(91,156,246,0.6)" : "";
+      } else {
+        cells[idx].style.background = "";
+        cells[idx].style.color = "";
+        cells[idx].textContent = "";
+        cells[idx].style.boxShadow = "";
+      }
+    }
+  }
+
+  function clearSourceHighlights() {
+    for (let ci = 0; ci < mA * p; ci++) if (cellsA1[ci]) cellsA1[ci].style.boxShadow = "";
+    for (let ci = 0; ci < p * q; ci++) if (cellsB1[ci]) cellsB1[ci].style.boxShadow = "";
+  }
+
+  function highlightPhase1(i, j) {
+    for (let k = 0; k < p; k++) {
+      const aIdx = i * p + k;
+      if (cellsA1[aIdx]) cellsA1[aIdx].style.boxShadow = "inset 0 0 0 3px var(--good)";
+      const bIdx = k * q + j;
+      if (cellsB1[bIdx]) cellsB1[bIdx].style.boxShadow = "inset 0 0 0 3px var(--bad)";
+    }
+  }
+
+  const cellsA2 = hostA2.querySelectorAll(".cell");
+  const cellsB2 = hostB2.querySelectorAll(".cell");
+
+  function clearPhase2Highlights() {
+    for (let ci = 0; ci < mA * q; ci++) if (cellsA2[ci]) cellsA2[ci].style.boxShadow = "";
+    for (let ci = 0; ci < q * nC; ci++) if (cellsB2[ci]) cellsB2[ci].style.boxShadow = "";
+  }
+
+  function highlightPhase2(i, j) {
+    for (let k = 0; k < q; k++) {
+      const aIdx = i * q + k;
+      if (cellsA2[aIdx]) cellsA2[aIdx].style.boxShadow = "inset 0 0 0 3px var(--good)";
+      const bIdx = k * nC + j;
+      if (cellsB2[bIdx]) cellsB2[bIdx].style.boxShadow = "inset 0 0 0 3px var(--bad)";
+    }
+  }
+
+  function renderFrame(n) {
+    if (n === 0) {
+      phase1Label.style.opacity = "1";
+      phase2Label.style.opacity = "0.3";
+      phase2Wrap.style.display = "none";
+      fillHost(rHostT, cellData1, 0);
+      fillHost(rHostR2, cellData2, 0);
+      trace1.innerHTML = "";
+      info.textContent = "";
+      clearSourceHighlights();
+      clearPhase2Highlights();
+      return;
+    }
+    if (n <= phase1Len) {
+      phase1Label.style.opacity = "1";
+      phase2Label.style.opacity = "0.3";
+      phase2Wrap.style.display = "none";
+      fillHost(rHostT, cellData1, n);
+      fillHost(rHostR2, cellData2, 0);
+      clearSourceHighlights();
+      clearPhase2Highlights();
+      const last = cellData1[n - 1];
+      highlightPhase1(last.i, last.j);
+      trace1.innerHTML = `(U·Σ)<sub>${last.i}${last.j}</sub> = ${last.formula} = <b>${last.value.toFixed(2)}</b>`;
+      info.textContent = `Фаза 1 (${n}/${phase1Len}): (${last.i},${last.j}) Σ = ${last.value.toFixed(2)}`;
     } else {
-      paused = false;
-      pauseBtn.textContent = "⏸ Пауза";
-      const fn = resumeFn; resumeFn = null;
-      if (fn) fn();
-    }
-  });
-
-  function rebuild() {
-    abort = true; paused = false; resumeFn = null;
-    if (timeoutId) clearTimeout(timeoutId);
-    setTimeout(() => {
-      abort = false; timeoutId = null;
-      const toRemove = body.querySelectorAll("div, button");
-      for (const el of toRemove) {
-        if (el.classList.contains("live-repeat")) continue;
-        if (el.parentNode === body) el.remove();
+      phase1Label.style.opacity = "0.6";
+      phase2Label.style.opacity = "1";
+      phase2Wrap.style.display = "";
+      fillHost(rHostT, cellData1, phase1Len);
+      clearSourceHighlights();
+      const phase2n = n - phase1Len;
+      fillHost(rHostR2, cellData2, phase2n);
+      clearPhase2Highlights();
+      if (phase2n > 0) {
+        const last = cellData2[phase2n - 1];
+        highlightPhase2(last.i, last.j);
+        trace2.innerHTML = `${data.resultLabel}<sub>${last.i}${last.j}</sub> = ${last.formula} = <b>${last.value.toFixed(2)}</b>`;
+        info2.textContent = `Фаза 2 (${phase2n}/${cellData2.length}): (${last.i},${last.j}) Σ = ${last.value.toFixed(2)}`;
       }
-      const existingRepeats = body.querySelectorAll(".live-repeat");
-      for (const b of existingRepeats) b.remove();
-      buildAll();
-      btnRow.appendChild(pauseBtn);
-      pauseBtn.textContent = "⏸ Пауза";
-      addRepeatBtn(btnRow, rebuild);
-    }, 100);
+    }
   }
 
-  const btnRow = document.createElement("div");
-  btnRow.style.cssText = "display:flex;gap:0.3rem;justify-content:center;flex-wrap:wrap";
-  btnRow.appendChild(pauseBtn);
-  addRepeatBtn(btnRow, rebuild);
-  body.appendChild(btnRow);
+  createFrameSlider(body, totalFrames, renderFrame, { speed: 250 });
 }
 
 function liveAddition(body, data) {
@@ -922,6 +1096,15 @@ function liveAddition(body, data) {
   const m = A.length, n = A[0].length;
   const sA = minMax(A), sR = minMax(R);
   const working = zeros(m, n);
+
+  const cellData = [];
+  for (let i = 0; i < m; i++) {
+    for (let j = 0; j < n; j++) {
+      const vB = B.length === 1 ? (B[0] ? B[0][j] || 0 : 0) : (B[i] ? B[i][j] || 0 : 0);
+      cellData.push({ i, j, value: A[i][j] + vB, vA: A[i][j], vB });
+    }
+  }
+  const totalFrames = cellData.length + 1;
 
   const row = document.createElement("div");
   row.style.cssText = "display:flex;gap:0.5rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:0.5rem";
@@ -969,66 +1152,51 @@ function liveAddition(body, data) {
 
   const cellsA = hostA.querySelectorAll(".cell");
   const cellsB = hostB.querySelectorAll(".cell");
-  const cellsR = rHost.querySelectorAll(".cell");
 
-  let ci = 0, cj = 0, paused = false, resumeFn = null;
-
-  function tick() {
-    if (ci >= m) { info.textContent = "Результат готов"; return; }
-    const aIdx = ci * n + cj;
-    const vB = B.length === 1 ? (B[0] ? B[0][cj] || 0 : 0) : (B[ci] ? B[ci][cj] || 0 : 0);
-    const vR = A[ci][cj] + vB;
-    if (cellsA[aIdx]) cellsA[aIdx].style.boxShadow = "inset 0 0 0 3px var(--good)";
-    if (cellsB[aIdx]) cellsB[aIdx].style.boxShadow = "inset 0 0 0 3px var(--bad)";
-    working[ci][cj] = vR;
-    const t = sR.mx > sR.mn ? (vR - sR.mn) / (sR.mx - sR.mn) : 0.5;
-    const c = viridis(Math.max(0, Math.min(1, t)));
-    cellsR[aIdx].style.background = viridisRgb(c);
-    cellsR[aIdx].style.color = t > 0.6 ? "#080c14" : "#fff";
-    cellsR[aIdx].textContent = vR.toFixed(2);
-    cellsR[aIdx].style.boxShadow = "inset 0 0 0 3px var(--accent), 0 0 18px rgba(91,156,246,0.6)";
-    trace.innerHTML = `${data.leftLabel}<sub>${ci}${cj}</sub> + ${data.rightLabel}<sub>${ci}${cj}</sub> = ${A[ci][cj].toFixed(2)} + ${vB.toFixed(2)} = <b>${vR.toFixed(2)}</b>`;
-    info.textContent = `(${ci},${cj}): ${A[ci][cj].toFixed(2)} + ${vB.toFixed(2)} = ${vR.toFixed(2)}`;
-    setTimeout(() => {
-      if (cellsA[aIdx]) cellsA[aIdx].style.boxShadow = "";
-      if (cellsB[aIdx]) cellsB[aIdx].style.boxShadow = "";
-      if (cellsR[aIdx]) cellsR[aIdx].style.boxShadow = "";
-    }, 300);
-    cj++;
-    if (cj >= n) { cj = 0; ci++; }
-    scheduleNext();
+  function renderFrame(frame) {
+    for (let ci = 0; ci < m; ci++) {
+      for (let cj = 0; cj < n; cj++) {
+        const idx = ci * n + cj;
+        const cellsR = rHost.querySelectorAll(".cell");
+        if (!cellsR[idx]) continue;
+        if (idx < frame) {
+          const cd = cellData[idx];
+          working[ci][cj] = cd.value;
+          const t = sR.mx > sR.mn ? (cd.value - sR.mn) / (sR.mx - sR.mn) : 0.5;
+          const c = viridis(Math.max(0, Math.min(1, t)));
+          cellsR[idx].style.background = viridisRgb(c);
+          cellsR[idx].style.color = t > 0.6 ? "#080c14" : "#fff";
+          cellsR[idx].textContent = cd.value.toFixed(2);
+          cellsR[idx].style.boxShadow = "";
+          if (cellsA[idx]) cellsA[idx].style.boxShadow = "";
+          if (cellsB[idx]) cellsB[idx].style.boxShadow = "";
+        } else {
+          working[ci][cj] = 0;
+          cellsR[idx].style.background = "";
+          cellsR[idx].style.color = "";
+          cellsR[idx].textContent = "";
+          cellsR[idx].style.boxShadow = "";
+          if (cellsA[idx]) cellsA[idx].style.boxShadow = "";
+          if (cellsB[idx]) cellsB[idx].style.boxShadow = "";
+        }
+      }
+    }
+    if (frame > 0) {
+      const last = cellData[frame - 1];
+      const cellsR = rHost.querySelectorAll(".cell");
+      const lastIdx = (frame - 1);
+      if (cellsA[lastIdx]) cellsA[lastIdx].style.boxShadow = "inset 0 0 0 3px var(--good)";
+      if (cellsB[lastIdx]) cellsB[lastIdx].style.boxShadow = "inset 0 0 0 3px var(--bad)";
+      if (cellsR[lastIdx]) cellsR[lastIdx].style.boxShadow = "inset 0 0 0 3px var(--accent), 0 0 18px rgba(91,156,246,0.6)";
+      trace.innerHTML = `${data.leftLabel}<sub>${last.i}${last.j}</sub> + ${data.rightLabel}<sub>${last.i}${last.j}</sub> = ${last.vA.toFixed(2)} + ${last.vB.toFixed(2)} = <b>${last.value.toFixed(2)}</b>`;
+      info.textContent = `(${last.i},${last.j}): ${last.vA.toFixed(2)} + ${last.vB.toFixed(2)} = ${last.value.toFixed(2)}`;
+    } else {
+      trace.innerHTML = "";
+      info.textContent = "";
+    }
   }
 
-  function scheduleNext() {
-    if (paused) { resumeFn = tick; return; }
-    setTimeout(() => { if (!paused) tick(); else resumeFn = tick; }, 400);
-  }
-
-  scheduleNext();
-
-  function restartAdd() {
-    paused = false; resumeFn = null;
-    ci = 0; cj = 0;
-    for (let i = 0; i < m; i++) for (let j = 0; j < n; j++) working[i][j] = 0;
-    rHost.innerHTML = "";
-    renderMatrixBlock(rHost, "", working, { scale: sR });
-    trace.textContent = "";
-    info.textContent = "";
-    scheduleNext();
-  }
-
-  const btnRow = document.createElement("div");
-  btnRow.style.cssText = "display:flex;gap:0.3rem;justify-content:center;flex-wrap:wrap;margin-top:0.5rem";
-  const pauseBtn2 = document.createElement("button");
-  pauseBtn2.textContent = "⏸ Пауза";
-  pauseBtn2.style.cssText = "padding:0.25rem 0.7rem;font-size:0.75rem;cursor:pointer;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text)";
-  pauseBtn2.addEventListener("click", () => {
-    if (!paused) { paused = true; pauseBtn2.textContent = "▶ Продолжить"; }
-    else { paused = false; pauseBtn2.textContent = "⏸ Пауза"; const fn = resumeFn; resumeFn = null; if (fn) fn(); }
-  });
-  btnRow.appendChild(pauseBtn2);
-  addRepeatBtn(btnRow, restartAdd);
-  body.appendChild(btnRow);
+  createFrameSlider(body, totalFrames, renderFrame, { speed: 300 });
 }
 
 function liveSubtraction(body, data) {
@@ -1036,6 +1204,15 @@ function liveSubtraction(body, data) {
   const m = A.length, n = A[0].length;
   const sA = minMax(A), sR = minMax(R);
   const working = zeros(m, n);
+
+  const cellData = [];
+  for (let i = 0; i < m; i++) {
+    for (let j = 0; j < n; j++) {
+      const vB = B.length === 1 ? (B[0] ? B[0][j] || 0 : 0) : (B[i] ? B[i][j] || 0 : 0);
+      cellData.push({ i, j, value: A[i][j] - vB, vA: A[i][j], vB });
+    }
+  }
+  const totalFrames = cellData.length + 1;
 
   const row = document.createElement("div");
   row.style.cssText = "display:flex;gap:0.5rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:0.5rem";
@@ -1083,67 +1260,51 @@ function liveSubtraction(body, data) {
 
   const cellsA = hostA.querySelectorAll(".cell");
   const cellsB = hostB.querySelectorAll(".cell");
-  const cellsR = rHost.querySelectorAll(".cell");
 
-  let ci = 0, cj = 0, paused = false, resumeFn = null;
-
-  function tick() {
-    if (ci >= m) { info.textContent = "Результат готов"; return; }
-    const aIdx = ci * n + cj;
-    const vA = A[ci][cj], vB = B.length === 1 ? (B[0] ? B[0][cj] || 0 : 0) : (B[ci] ? B[ci][cj] || 0 : 0), vR = vA - vB;
-    if (cellsA[aIdx]) cellsA[aIdx].style.boxShadow = "inset 0 0 0 3px var(--good)";
-    if (cellsB[aIdx]) cellsB[aIdx].style.boxShadow = "inset 0 0 0 3px var(--bad)";
-    working[ci][cj] = vR;
-    const t = sR.mx > sR.mn ? (vR - sR.mn) / (sR.mx - sR.mn) : 0.5;
-    const c = viridis(Math.max(0, Math.min(1, t)));
-    cellsR[aIdx].style.background = viridisRgb(c);
-    cellsR[aIdx].style.color = t > 0.6 ? "#080c14" : "#fff";
-    cellsR[aIdx].textContent = vR.toFixed(2);
-    cellsR[aIdx].style.boxShadow = "inset 0 0 0 3px var(--accent), 0 0 18px rgba(91,156,246,0.6)";
-    trace.innerHTML = `${data.leftLabel}<sub>${ci}${cj}</sub> − ${data.rightLabel}<sub>${ci}${cj}</sub> = ${vA.toFixed(2)} − ${vB.toFixed(2)} = <b>${vR.toFixed(2)}</b>`;
-    info.textContent = `(${ci},${cj}): ${vA.toFixed(2)} − ${vB.toFixed(2)} = ${vR.toFixed(2)}`;
-    setTimeout(() => {
-      if (cellsA[aIdx]) cellsA[aIdx].style.boxShadow = "";
-      if (cellsB[aIdx]) cellsB[aIdx].style.boxShadow = "";
-      if (cellsR[aIdx]) cellsR[aIdx].style.boxShadow = "";
-    }, 300);
-    cj++;
-    if (cj >= n) { cj = 0; ci++; }
-    scheduleNext();
+  function renderFrame(frame) {
+    for (let ci = 0; ci < m; ci++) {
+      for (let cj = 0; cj < n; cj++) {
+        const idx = ci * n + cj;
+        const cellsR = rHost.querySelectorAll(".cell");
+        if (!cellsR[idx]) continue;
+        if (idx < frame) {
+          const cd = cellData[idx];
+          working[ci][cj] = cd.value;
+          const t = sR.mx > sR.mn ? (cd.value - sR.mn) / (sR.mx - sR.mn) : 0.5;
+          const c = viridis(Math.max(0, Math.min(1, t)));
+          cellsR[idx].style.background = viridisRgb(c);
+          cellsR[idx].style.color = t > 0.6 ? "#080c14" : "#fff";
+          cellsR[idx].textContent = cd.value.toFixed(2);
+          cellsR[idx].style.boxShadow = "";
+          if (cellsA[idx]) cellsA[idx].style.boxShadow = "";
+          if (cellsB[idx]) cellsB[idx].style.boxShadow = "";
+        } else {
+          working[ci][cj] = 0;
+          cellsR[idx].style.background = "";
+          cellsR[idx].style.color = "";
+          cellsR[idx].textContent = "";
+          cellsR[idx].style.boxShadow = "";
+          if (cellsA[idx]) cellsA[idx].style.boxShadow = "";
+          if (cellsB[idx]) cellsB[idx].style.boxShadow = "";
+        }
+      }
+    }
+    if (frame > 0) {
+      const last = cellData[frame - 1];
+      const cellsR = rHost.querySelectorAll(".cell");
+      const lastIdx = (frame - 1);
+      if (cellsA[lastIdx]) cellsA[lastIdx].style.boxShadow = "inset 0 0 0 3px var(--good)";
+      if (cellsB[lastIdx]) cellsB[lastIdx].style.boxShadow = "inset 0 0 0 3px var(--bad)";
+      if (cellsR[lastIdx]) cellsR[lastIdx].style.boxShadow = "inset 0 0 0 3px var(--accent), 0 0 18px rgba(91,156,246,0.6)";
+      trace.innerHTML = `${data.leftLabel}<sub>${last.i}${last.j}</sub> − ${data.rightLabel}<sub>${last.i}${last.j}</sub> = ${last.vA.toFixed(2)} − ${last.vB.toFixed(2)} = <b>${last.value.toFixed(2)}</b>`;
+      info.textContent = `(${last.i},${last.j}): ${last.vA.toFixed(2)} − ${last.vB.toFixed(2)} = ${last.value.toFixed(2)}`;
+    } else {
+      trace.innerHTML = "";
+      info.textContent = "";
+    }
   }
 
-  function scheduleNext() {
-    if (paused) { resumeFn = tick; return; }
-    setTimeout(() => { if (!paused) tick(); else resumeFn = tick; }, 400);
-  }
-
-  scheduleNext();
-
-  function restartSub() {
-    paused = false; resumeFn = null;
-    ci = 0; cj = 0;
-    for (let i = 0; i < m; i++) for (let j = 0; j < n; j++) working[i][j] = 0;
-    rHost.innerHTML = "";
-    renderMatrixBlock(rHost, "", working, { scale: sR });
-    trace.textContent = "";
-    info.textContent = "";
-    for (const c of cellsA) c.style.boxShadow = "";
-    for (const c of cellsB) c.style.boxShadow = "";
-    scheduleNext();
-  }
-
-  const btnRow = document.createElement("div");
-  btnRow.style.cssText = "display:flex;gap:0.3rem;justify-content:center;flex-wrap:wrap;margin-top:0.5rem";
-  const pauseBtn2 = document.createElement("button");
-  pauseBtn2.textContent = "⏸ Пауза";
-  pauseBtn2.style.cssText = "padding:0.25rem 0.7rem;font-size:0.75rem;cursor:pointer;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text)";
-  pauseBtn2.addEventListener("click", () => {
-    if (!paused) { paused = true; pauseBtn2.textContent = "▶ Продолжить"; }
-    else { paused = false; pauseBtn2.textContent = "⏸ Пауза"; const fn = resumeFn; resumeFn = null; if (fn) fn(); }
-  });
-  btnRow.appendChild(pauseBtn2);
-  addRepeatBtn(btnRow, restartSub);
-  body.appendChild(btnRow);
+  createFrameSlider(body, totalFrames, renderFrame, { speed: 300 });
 }
 
 function liveMeans(body, data) {
@@ -1170,25 +1331,25 @@ function liveMeans(body, data) {
   info.style.cssText = "font-size:0.75rem;color:var(--muted);text-align:center;min-height:1.2rem";
   body.appendChild(info);
 
-  let ci = 0;
-  function reveal(cb) {
-    ci = 0;
-    const iv = setInterval(() => {
-      if (ci >= cards.length) { clearInterval(iv); if (cb) cb(); return; }
-      cards[ci].style.opacity = "1";
-      cards[ci].style.transform = "translateY(0)";
-      info.textContent = `μ${ci+1} = ${Number.isInteger(vals[ci]) ? vals[ci] : vals[ci].toFixed(4)}`;
-      ci++;
-    }, 400);
-    return iv;
+  const totalFrames = cards.length + 1;
+  function renderFrame(n) {
+    for (let ci = 0; ci < cards.length; ci++) {
+      if (ci < n) {
+        cards[ci].style.opacity = "1";
+        cards[ci].style.transform = "translateY(0)";
+      } else {
+        cards[ci].style.opacity = "0";
+        cards[ci].style.transform = "translateY(8px)";
+      }
+    }
+    if (n > 0 && n <= vals.length) {
+      info.textContent = `μ${n} = ${Number.isInteger(vals[n-1]) ? vals[n-1] : vals[n-1].toFixed(4)}`;
+    } else {
+      info.textContent = "";
+    }
   }
-  reveal();
 
-  addRepeatBtn(body, () => {
-    for (const c of cards) { c.style.opacity = "0"; c.style.transform = "translateY(8px)"; }
-    info.textContent = "";
-    reveal();
-  });
+  createFrameSlider(body, totalFrames, renderFrame, { speed: 350 });
 }
 
 function liveEigenvalues(body, data) {
@@ -1215,27 +1376,28 @@ function liveEigenvalues(body, data) {
   info.style.cssText = "font-size:0.75rem;color:var(--muted);text-align:center;min-height:1.2rem";
   body.appendChild(info);
 
-  let ci = 0;
-  function reveal() {
-    ci = 0;
-    for (const c of cards) { c.style.opacity = "0"; c.style.transform = "scale(0.8)"; }
-    const iv = setInterval(() => {
-      if (ci >= cards.length) { clearInterval(iv); return; }
-      cards[ci].style.opacity = "1";
-      cards[ci].style.transform = "scale(1)";
-      info.textContent = `${vals[ci].label} = ${Number.isInteger(vals[ci].value) ? vals[ci].value : vals[ci].value.toFixed(4)}`;
-      const glow = cards[ci].querySelector("div:last-child");
-      if (glow) { glow.style.transition = "text-shadow 0.4s"; glow.style.textShadow = "0 0 12px rgba(167,139,250,0.6)"; setTimeout(() => { glow.style.textShadow = "none"; }, 400); }
-      ci++;
-    }, 400);
-    return iv;
+  const totalFrames = cards.length + 1;
+  function renderFrame(n) {
+    for (let ci = 0; ci < cards.length; ci++) {
+      if (ci < n) {
+        cards[ci].style.opacity = "1";
+        cards[ci].style.transform = "scale(1)";
+        const glow = cards[ci].querySelector("div:last-child");
+        if (glow && ci === n - 1) glow.style.textShadow = "0 0 12px rgba(167,139,250,0.6)";
+        else if (glow) glow.style.textShadow = "none";
+      } else {
+        cards[ci].style.opacity = "0";
+        cards[ci].style.transform = "scale(0.8)";
+      }
+    }
+    if (n > 0 && n <= vals.length) {
+      info.textContent = `${vals[n-1].label} = ${Number.isInteger(vals[n-1].value) ? vals[n-1].value : vals[n-1].value.toFixed(4)}`;
+    } else {
+      info.textContent = "";
+    }
   }
-  let iv = reveal();
 
-  addRepeatBtn(body, () => {
-    clearInterval(iv);
-    iv = reveal();
-  });
+  createFrameSlider(body, totalFrames, renderFrame, { speed: 350 });
 }
 
 function liveValueMap(body, data) {
@@ -1261,24 +1423,19 @@ function liveValueMap(body, data) {
   info.style.cssText = "font-size:0.75rem;color:var(--muted);text-align:center;min-height:1.2rem";
   body.appendChild(info);
 
-  let ci = 0;
-  function reveal() {
-    ci = 0;
-    for (const c of cards) c.style.opacity = "0";
-    const iv = setInterval(() => {
-      if (ci >= cards.length) { clearInterval(iv); return; }
-      cards[ci].style.opacity = "1";
-      info.textContent = `σ${ci+1} = √${from[ci].toFixed(4)} = ${to[ci].toFixed(4)}`;
-      ci++;
-    }, 450);
-    return iv;
+  const totalFrames = cards.length + 1;
+  function renderFrame(n) {
+    for (let ci = 0; ci < cards.length; ci++) {
+      cards[ci].style.opacity = ci < n ? "1" : "0";
+    }
+    if (n > 0 && n <= cards.length) {
+      info.textContent = `σ${n} = √${from[n-1].toFixed(4)} = ${to[n-1].toFixed(4)}`;
+    } else {
+      info.textContent = "";
+    }
   }
-  let iv = reveal();
 
-  addRepeatBtn(body, () => {
-    clearInterval(iv);
-    iv = reveal();
-  });
+  createFrameSlider(body, totalFrames, renderFrame, { speed: 350 });
 }
 
 function liveNorms(body, data) {
@@ -1288,7 +1445,6 @@ function liveNorms(body, data) {
   body.appendChild(formula);
 
   const fills = [];
-  const labels = [];
   function renderBars(arr, label, top, prefix) {
     const wrap = document.createElement("div");
     wrap.style.cssText = "margin:0.25rem 0";
@@ -1302,7 +1458,7 @@ function liveNorms(body, data) {
       bar.style.cssText = "display:flex;align-items:center;gap:0.3rem;margin:0.1rem 0";
       const fill = document.createElement("div");
       const finalPct = (arr[i]/max)*100;
-      fill.style.cssText = `height:14px;width:0%;background:${top.includes(i)?"var(--accent)":"var(--border)"};border-radius:4px;transition:width 0.15s linear;min-width:0px`;
+      fill.style.cssText = `height:14px;width:0%;background:${top.includes(i)?"var(--accent)":"var(--border)"};border-radius:4px;transition:width 0.2s ease-out;min-width:0px`;
       const lbl = document.createElement("span");
       lbl.style.cssText = "font-size:0.65rem;color:var(--muted);white-space:nowrap;min-width:3.5rem";
       lbl.textContent = `${i}: ${arr[i].toFixed(2)}`;
@@ -1323,28 +1479,26 @@ function liveNorms(body, data) {
   info.style.cssText = "font-size:0.75rem;color:var(--muted);text-align:center;min-height:1.2rem";
   body.appendChild(info);
 
-  let fi = 0;
-  function startBars() {
-    fi = 0;
-    for (const f of fills) f.el.style.width = "0%";
-    const iv = setInterval(() => {
-      if (fi >= fills.length) { clearInterval(iv); info.textContent = "Готово"; return; }
-      const f = fills[fi];
-      f.el.style.width = f.target + "%";
-      f.el.style.transition = "width 0.35s ease-out, box-shadow 0.3s";
-      f.el.style.boxShadow = "0 0 8px rgba(91,156,246,0.5)";
-      setTimeout(() => { f.el.style.boxShadow = "none"; }, 400);
+  const totalFrames = fills.length + 1;
+  function renderFrame(n) {
+    for (let fi = 0; fi < fills.length; fi++) {
+      if (fi < n) {
+        fills[fi].el.style.width = fills[fi].target + "%";
+        fills[fi].el.style.boxShadow = fi === n - 1 ? "0 0 8px rgba(91,156,246,0.5)" : "none";
+      } else {
+        fills[fi].el.style.width = "0%";
+        fills[fi].el.style.boxShadow = "none";
+      }
+    }
+    if (n > 0 && n <= fills.length) {
+      const f = fills[n - 1];
       info.textContent = `${f.prefix}[${f.idx}]² = ${f.val.toFixed(2)}`;
-      fi++;
-    }, 300);
-    return iv;
+    } else {
+      info.textContent = "";
+    }
   }
-  let iv = startBars();
 
-  addRepeatBtn(body, () => {
-    clearInterval(iv);
-    iv = startBars();
-  });
+  createFrameSlider(body, totalFrames, renderFrame, { speed: 250 });
 }
 
 function liveSelection(body, data) {
@@ -1352,56 +1506,117 @@ function liveSelection(body, data) {
   info.style.cssText = "font-size:0.82rem;color:var(--text);text-align:center;margin-bottom:0.4rem";
   info.innerHTML = `Строки: [${data.topRows.join(", ")}] &nbsp; Столбцы: [${data.topCols.join(", ")}]`;
   body.appendChild(info);
+
+  const matDefs = [
+    { label: "C", M: data.C, cols: data.C[0].length, s: minMax(data.C) },
+    { label: "R", M: data.R, cols: data.R[0].length, s: minMax(data.R) },
+    { label: "W", M: data.W, cols: data.W[0].length, s: minMax(data.W) },
+  ];
   const row = document.createElement("div");
   row.style.cssText = "display:flex;gap:0.8rem;align-items:center;justify-content:center;flex-wrap:wrap";
   const hosts = [];
-  for (const { label, M, s } of [{ label: "C", M: data.C, s: minMax(data.C) }, { label: "R", M: data.R, s: minMax(data.R) }, { label: "W", M: data.W, s: minMax(data.W) }]) {
-    const host = renderSandboxMatrix(row, label, zeros(M.length, M[0].length), s);
-    hosts.push({ host, M, rows: M.length, cols: M[0].length });
+  const allCells = [];
+  let maxCells = 0;
+  for (const def of matDefs) {
+    const host = renderSandboxMatrix(row, def.label, zeros(def.M.length, def.M[0].length), def.s);
+    const cells = [];
+    for (let i = 0; i < def.M.length; i++) {
+      for (let j = 0; j < def.M[0].length; j++) {
+        cells.push({ i, j, value: def.M[i][j], cols: def.M[0].length, s: def.s });
+      }
+    }
+    allCells.push({ cells, host, cols: def.M[0].length });
+    maxCells = Math.max(maxCells, cells.length);
+    hosts.push(host);
   }
   body.appendChild(row);
   const info2 = document.createElement("div");
   info2.style.cssText = "font-size:0.75rem;color:var(--muted);text-align:center;margin-top:0.3rem";
-  info2.textContent = "Заполняем матрицы...";
   body.appendChild(info2);
-  const restarts = [];
-  let done = 0;
-  for (const h of hosts) {
-    const anim = animateCellFill(h.host, h.M, h.rows, h.cols, () => { done++; if (done === hosts.length) info2.textContent = "Готово"; });
-    restarts.push(anim.restart);
+
+  const totalFrames = maxCells + 1;
+  function renderFrame(n) {
+    for (let hi = 0; hi < allCells.length; hi++) {
+      const { cells, host, cols } = allCells[hi];
+      const hostCells = host.querySelectorAll(".cell");
+      for (let ci = 0; ci < cells.length; ci++) {
+        const cd = cells[ci];
+        const idx = cd.i * cols + cd.j;
+        if (!hostCells[idx]) continue;
+        if (ci < n) {
+          const t = cd.s.mx > cd.s.mn ? (cd.value - cd.s.mn) / (cd.s.mx - cd.s.mn) : 0.5;
+          const c = viridis(t);
+          hostCells[idx].style.background = viridisRgb(c);
+          hostCells[idx].style.color = t > 0.6 ? "#080c14" : "#fff";
+          hostCells[idx].textContent = cd.value.toFixed(2);
+          hostCells[idx].style.boxShadow = ci === n - 1 ? "inset 0 0 0 3px var(--accent), 0 0 18px rgba(91,156,246,0.6)" : "";
+        } else {
+          hostCells[idx].style.background = "";
+          hostCells[idx].style.color = "";
+          hostCells[idx].textContent = "";
+          hostCells[idx].style.boxShadow = "";
+        }
+      }
+    }
+    info2.textContent = n === 0 ? "" : (n >= maxCells ? "Готово" : `Заполнено ${n}/${maxCells}`);
   }
-  addRepeatBtn(body, () => {
-    info2.textContent = "Заполняем матрицы...";
-    done = 0;
-    for (const r of restarts) r();
-  });
+
+  createFrameSlider(body, totalFrames, renderFrame, { speed: 200 });
 }
 
 function liveInit(body, data) {
   const row = document.createElement("div");
   row.style.cssText = "display:flex;gap:0.8rem;align-items:center;justify-content:center;flex-wrap:wrap";
-  const hosts = [];
+  const matDefs = [];
   for (const m of data.matrices) {
-    const s = minMax(m.matrix);
-    const host = renderSandboxMatrix(row, m.label, zeros(m.matrix.length, m.matrix[0].length), s);
-    hosts.push({ host, M: m.matrix, rows: m.matrix.length, cols: m.matrix[0].length });
+    matDefs.push({ label: m.label, M: m.matrix, cols: m.matrix[0].length, s: minMax(m.matrix) });
+  }
+  const allCells = [];
+  let maxCells = 0;
+  for (const def of matDefs) {
+    const host = renderSandboxMatrix(row, def.label, zeros(def.M.length, def.M[0].length), def.s);
+    const cells = [];
+    for (let i = 0; i < def.M.length; i++) {
+      for (let j = 0; j < def.M[0].length; j++) {
+        cells.push({ i, j, value: def.M[i][j], cols: def.M[0].length, s: def.s });
+      }
+    }
+    allCells.push({ cells, host, cols: def.M[0].length });
+    maxCells = Math.max(maxCells, cells.length);
   }
   body.appendChild(row);
   const info = document.createElement("div");
   info.style.cssText = "font-size:0.75rem;color:var(--muted);text-align:center;margin-top:0.3rem";
-  info.textContent = "Инициализируем случайные матрицы...";
   body.appendChild(info);
-  const restarts = [];
-  let done = 0;
-  for (const h of hosts) {
-    const anim = animateCellFill(h.host, h.M, h.rows, h.cols, () => { done++; if (done === hosts.length) info.textContent = "Готово"; });
-    restarts.push(anim.restart);
+
+  const totalFrames = maxCells + 1;
+  function renderFrame(n) {
+    for (let hi = 0; hi < allCells.length; hi++) {
+      const { cells, host, cols } = allCells[hi];
+      const hostCells = host.querySelectorAll(".cell");
+      for (let ci = 0; ci < cells.length; ci++) {
+        const cd = cells[ci];
+        const idx = cd.i * cols + cd.j;
+        if (!hostCells[idx]) continue;
+        if (ci < n) {
+          const t = cd.s.mx > cd.s.mn ? (cd.value - cd.s.mn) / (cd.s.mx - cd.s.mn) : 0.5;
+          const c = viridis(t);
+          hostCells[idx].style.background = viridisRgb(c);
+          hostCells[idx].style.color = t > 0.6 ? "#080c14" : "#fff";
+          hostCells[idx].textContent = cd.value.toFixed(2);
+          hostCells[idx].style.boxShadow = ci === n - 1 ? "inset 0 0 0 3px var(--accent), 0 0 18px rgba(91,156,246,0.6)" : "";
+        } else {
+          hostCells[idx].style.background = "";
+          hostCells[idx].style.color = "";
+          hostCells[idx].textContent = "";
+          hostCells[idx].style.boxShadow = "";
+        }
+      }
+    }
+    info.textContent = n === 0 ? "" : (n >= maxCells ? "Готово" : `Заполнено ${n}/${maxCells}`);
   }
-  addRepeatBtn(body, () => {
-    info.textContent = "Инициализируем случайные матрицы...";
-    done = 0;
-    for (const r of restarts) r();
-  });
+
+  createFrameSlider(body, totalFrames, renderFrame, { speed: 200 });
 }
 
 function liveIterationHistory(body, data) {
@@ -1410,37 +1625,7 @@ function liveIterationHistory(body, data) {
   const maxFrob = Math.max(...history.map(h => h.frob), 1e-12);
   const label = data.label || "Итерация";
 
-  let idx = 0, paused = false, resumeFn = null, timeoutId = null, abort = false;
-
-  function updateFrob(frob) {
-    const pct = Math.min(frob / maxFrob * 100, 100);
-    info.innerHTML = `${label} <b>${history[idx] ? history[idx].i : 0}</b> &nbsp;|&nbsp; Ошибка: ${frob.toFixed(4)}`;
-    barFill.style.width = pct + "%";
-    barFill.style.background = `hsl(${120 - pct * 1.2}, 80%, 50%)`;
-  }
-
-  function pauseCheck(fn) {
-    if (paused) { resumeFn = fn; return true; }
-    return false;
-  }
-
-  function showIter() {
-    if (abort) return;
-    if (pauseCheck(showIter)) return;
-    if (idx >= history.length) { info.innerHTML += " &nbsp;✅ Готово"; return; }
-    const entry = history[idx];
-    updateFrob(entry.frob);
-    matrixHost.innerHTML = "";
-    renderMatrixBlock(matrixHost, "", entry.Ahat, { scale: scaleA });
-    const cells = matrixHost.querySelectorAll(".cell");
-    for (let ci = 0; ci < cells.length; ci++) {
-      cells[ci].style.animation = "none";
-      cells[ci].offsetHeight;
-      cells[ci].style.animation = `cellPulse 0.4s ease ${ci * 0.02}s both`;
-    }
-    idx++;
-    timeoutId = setTimeout(showIter, 500);
-  }
+  const totalFrames = history.length + 1;
 
   const formula = document.createElement("div");
   formula.style.cssText = "font-size:0.85rem;color:var(--accent);text-align:center;font-family:monospace;padding:0.3rem;background:rgba(0,0,0,0.12);border-radius:6px;margin-bottom:0.3rem";
@@ -1454,7 +1639,7 @@ function liveIterationHistory(body, data) {
   const barWrap = document.createElement("div");
   barWrap.style.cssText = "height:8px;background:rgba(255,255,255,0.1);border-radius:4px;margin:0.2rem 0 0.5rem;overflow:hidden";
   const barFill = document.createElement("div");
-  barFill.style.cssText = "height:100%;width:100%;border-radius:4px;transition:width 0.3s";
+  barFill.style.cssText = "height:100%;width:0%;border-radius:4px;transition:width 0.3s";
   barWrap.appendChild(barFill);
   body.appendChild(barWrap);
 
@@ -1462,93 +1647,187 @@ function liveIterationHistory(body, data) {
   matrixHost.style.cssText = "display:flex;justify-content:center";
   body.appendChild(matrixHost);
 
-  showIter();
-
-  const pauseBtn = document.createElement("button");
-  pauseBtn.textContent = "⏸ Пауза";
-  pauseBtn.style.cssText = "margin:0.5rem 0.3rem 0;padding:0.3rem 0.9rem;font-size:0.78rem;font-weight:600;color:var(--accent);background:rgba(91,156,246,0.12);border:1px solid var(--accent);border-radius:8px;cursor:pointer";
-  pauseBtn.addEventListener("click", () => {
-    if (!paused) {
-      paused = true; if (timeoutId) clearTimeout(timeoutId);
-      pauseBtn.textContent = "▶ Продолжить";
-    } else {
-      paused = false;
-      pauseBtn.textContent = "⏸ Пауза";
-      const fn = resumeFn; resumeFn = null;
-      if (fn) timeoutId = setTimeout(fn, 50);
-    }
-  });
-
-  const btnRow = document.createElement("div");
-  btnRow.style.cssText = "display:flex;gap:0.3rem;justify-content:center;flex-wrap:wrap";
-  btnRow.appendChild(pauseBtn);
-  addRepeatBtn(btnRow, () => {
-    abort = true; if (timeoutId) clearTimeout(timeoutId);
-    setTimeout(() => {
-      abort = false; paused = false; resumeFn = null; timeoutId = null;
-      idx = 0;
+  function renderFrame(n) {
+    if (n === 0) {
       info.innerHTML = "";
-      barFill.style.width = "100%";
+      barFill.style.width = "0%";
       matrixHost.innerHTML = "";
-      showIter();
-    }, 50);
-  });
-  body.appendChild(btnRow);
+      return;
+    }
+    const entry = history[n - 1];
+    const frob = entry.frob;
+    const pct = Math.min(frob / maxFrob * 100, 100);
+    info.innerHTML = `${label} <b>${entry.i}</b> &nbsp;|&nbsp; Ошибка: ${frob.toFixed(4)}`;
+    barFill.style.width = pct + "%";
+    barFill.style.background = `hsl(${120 - pct * 1.2}, 80%, 50%)`;
+    matrixHost.innerHTML = "";
+    renderMatrixBlock(matrixHost, "", entry.Ahat, { scale: scaleA });
+    const cells = matrixHost.querySelectorAll(".cell");
+    for (let ci = 0; ci < cells.length; ci++) {
+      cells[ci].style.animation = "none";
+      cells[ci].offsetHeight;
+      cells[ci].style.animation = `cellPulse 0.4s ease ${ci * 0.02}s both`;
+    }
+  }
+
+  createFrameSlider(body, totalFrames, renderFrame, { speed: 400 });
 }
 
 function liveNote(body, data) {
-  if (data.matrices) {
+  const txt = data.text;
+  const hasMatrices = data.matrices && data.matrices.length > 0;
+  let matrixInfo = null;
+  let matCellsArr = [];
+  let matMaxCells = 0;
+  let totalCells = 0;
+
+  if (hasMatrices) {
     const row = document.createElement("div");
     row.style.cssText = "display:flex;gap:1rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:0.5rem";
-    const anims = [];
     for (const m of data.matrices) {
-      const host = renderSandboxMatrix(row, m.label, zeros(m.matrix.length, m.matrix[0].length), minMax(m.matrix));
-      anims.push({ host, M: m.matrix, rows: m.matrix.length, cols: m.matrix[0].length });
+      const s = minMax(m.matrix);
+      const host = renderSandboxMatrix(row, m.label, zeros(m.matrix.length, m.matrix[0].length), s);
+      const cells = [];
+      for (let i = 0; i < m.matrix.length; i++) {
+        for (let j = 0; j < m.matrix[0].length; j++) {
+          cells.push({ i, j, value: m.matrix[i][j], cols: m.matrix[0].length, s });
+        }
+      }
+      matCellsArr.push({ cells, host, cols: m.matrix[0].length });
+      matMaxCells = Math.max(matMaxCells, cells.length);
+      totalCells += cells.length;
     }
     body.appendChild(row);
-    const info = document.createElement("div");
-    info.style.cssText = "font-size:0.75rem;color:var(--muted);text-align:center;margin-bottom:0.3rem";
-    info.textContent = "Показываем матрицы...";
-    body.appendChild(info);
-    let done = 0;
-    let restarts = [];
-    for (const a of anims) {
-      const anim = animateCellFill(a.host, a.M, a.rows, a.cols, () => { done++; if (done === anims.length) info.textContent = "Готово"; });
-      restarts.push(anim.restart);
-    }
-    const btn = document.createElement("button");
-    btn.textContent = "⟳ Повторить";
-    btn.style.cssText = "margin-top:0.3rem;margin-bottom:0.5rem;padding:0.3rem 0.9rem;font-size:0.78rem;font-weight:600;color:var(--accent);background:rgba(91,156,246,0.12);border:1px solid var(--accent);border-radius:8px;cursor:pointer;transition:background 0.15s";
-    btn.addEventListener("mouseenter", () => btn.style.background = "rgba(91,156,246,0.25)");
-    btn.addEventListener("mouseleave", () => btn.style.background = "rgba(91,156,246,0.12)");
-    btn.addEventListener("click", () => { info.textContent = "Показываем матрицы..."; info.style.color = ""; done = 0; for (const r of restarts) r(); });
-    body.appendChild(btn);
+    matrixInfo = document.createElement("div");
+    matrixInfo.style.cssText = "font-size:0.75rem;color:var(--muted);text-align:center;margin-bottom:0.3rem";
+    body.appendChild(matrixInfo);
   }
+
   const note = document.createElement("div");
   note.style.cssText = "font-size:0.88rem;color:var(--text);line-height:1.5;padding:0.5rem;background:rgba(0,0,0,0.15);border-radius:8px;border:1px solid var(--border);min-height:1.5em";
   body.appendChild(note);
-  const txt = data.text;
-  let pos = 0;
-  let cursor = null;
-  function typeChar() {
-    if (pos >= txt.length) { if (cursor) cursor.remove(); return; }
-    note.textContent = txt.slice(0, pos + 1);
-    pos++;
-    setTimeout(typeChar, 25);
+
+  const cellFrames = hasMatrices ? totalCells : 0;
+  const totalFrames = 1 + cellFrames + 1;
+
+  function fillCell(flatIdx) {
+    let accum = 0;
+    for (let hi = 0; hi < matCellsArr.length; hi++) {
+      const { cells, host, cols } = matCellsArr[hi];
+      if (flatIdx < accum + cells.length) {
+        const localIdx = flatIdx - accum;
+        const cd = cells[localIdx];
+        const hostCells = host.querySelectorAll(".cell");
+        const idx = cd.i * cols + cd.j;
+        if (hostCells[idx]) {
+          const t = cd.s.mx > cd.s.mn ? (cd.value - cd.s.mn) / (cd.s.mx - cd.s.mn) : 0.5;
+          const c = viridis(t);
+          hostCells[idx].style.background = viridisRgb(c);
+          hostCells[idx].style.color = t > 0.6 ? "#080c14" : "#fff";
+          hostCells[idx].textContent = cd.value.toFixed(2);
+          hostCells[idx].style.boxShadow = "inset 0 0 0 3px var(--accent), 0 0 18px rgba(91,156,246,0.6)";
+        }
+        return;
+      }
+      accum += cells.length;
+    }
   }
-  typeChar();
-  addRepeatBtn(body, () => {
-    pos = 0;
-    note.textContent = "";
-    typeChar();
-  });
+
+  function clearAllCells() {
+    for (let hi = 0; hi < matCellsArr.length; hi++) {
+      const { cells, host, cols } = matCellsArr[hi];
+      const hostCells = host.querySelectorAll(".cell");
+      for (let ci = 0; ci < cells.length; ci++) {
+        const cd = cells[ci];
+        const idx = cd.i * cols + cd.j;
+        if (hostCells[idx]) {
+          hostCells[idx].style.background = "";
+          hostCells[idx].style.color = "";
+          hostCells[idx].textContent = "";
+          hostCells[idx].style.boxShadow = "";
+        }
+      }
+    }
+  }
+
+  function renderFrame(n) {
+    if (n === 0) {
+      clearAllCells();
+      note.textContent = "";
+      if (matrixInfo) matrixInfo.textContent = "";
+      return;
+    }
+    note.textContent = txt;
+    if (hasMatrices) {
+      clearAllCells();
+      const fillCount = n - 1;
+      const toFill = Math.min(fillCount, totalCells);
+      for (let ci = 0; ci < toFill; ci++) {
+        fillCell(ci);
+      }
+      if (matrixInfo) {
+        matrixInfo.textContent = toFill >= totalCells ? "Готово" : `Заполнено ${toFill}/${totalCells}`;
+      }
+    }
+  }
+
+  createFrameSlider(body, totalFrames, renderFrame, { speed: 120 });
 }
 
 function livePseudoinverse(body, data) {
   const { C, R, Cp, Rp, A, U } = data;
   const r = C[0].length;
-  const m = C.length;
-  const n = R[0].length;
+
+  const Ct = transpose(C);
+  const CtC = dot(Ct, C);
+  const Rt = transpose(R);
+  const RRt = dot(R, Rt);
+  const scalarCase = r === 1;
+
+  const frames = [];
+  frames.push({ phase: "Шаг 1: C⁺ = (CᵀC)⁻¹·Cᵀ", status: "Начало" });
+  frames.push({ phase: "Шаг 1: C⁺ = (CᵀC)⁻¹·Cᵀ", status: "Матрица C (выбранные столбцы)", show: "C" });
+  frames.push({ phase: "Шаг 1: C⁺ = (CᵀC)⁻¹·Cᵀ", status: "Вычисляем CᵀC ...", show: "CtC" });
+  if (scalarCase) {
+    const inv = 1 / CtC[0][0];
+    frames.push({ phase: "Шаг 1: C⁺ = (CᵀC)⁻¹·Cᵀ", status: `CᵀC = ${CtC[0][0].toFixed(3)} → (CᵀC)⁻¹ = ${inv.toFixed(3)}`, show: "CtC_inv_scalar" });
+  } else {
+    frames.push({ phase: "Шаг 1: C⁺ = (CᵀC)⁻¹·Cᵀ", status: "(CᵀC)⁻¹ вычислена", show: "CtC_inv" });
+  }
+  frames.push({ phase: "Шаг 1: C⁺ = (CᵀC)⁻¹·Cᵀ", status: "C⁺ найдена!", show: "Cp" });
+
+  frames.push({ phase: "Шаг 2: R⁺ = Rᵀ·(R·Rᵀ)⁻¹", status: "Матрица R (выбранные строки)", show: "R" });
+  frames.push({ phase: "Шаг 2: R⁺ = Rᵀ·(R·Rᵀ)⁻¹", status: "Вычисляем R·Rᵀ ...", show: "RRt" });
+  if (scalarCase) {
+    const inv = 1 / RRt[0][0];
+    frames.push({ phase: "Шаг 2: R⁺ = Rᵀ·(R·Rᵀ)⁻¹", status: `R·Rᵀ = ${RRt[0][0].toFixed(3)} → (R·Rᵀ)⁻¹ = ${inv.toFixed(3)}`, show: "RRt_inv_scalar" });
+  } else {
+    frames.push({ phase: "Шаг 2: R⁺ = Rᵀ·(R·Rᵀ)⁻¹", status: "(R·Rᵀ)⁻¹ вычислена", show: "RRt_inv" });
+  }
+  frames.push({ phase: "Шаг 2: R⁺ = Rᵀ·(R·Rᵀ)⁻¹", status: "R⁺ найдена!", show: "Rp" });
+
+  frames.push({ phase: "Шаг 3: U = C⁺·A·R⁺", status: "Перемножаем C⁺ · A · R⁺ ...", show: "U_formula1" });
+  frames.push({ phase: "Шаг 3: U = C⁺·A·R⁺", status: "Вычисляем (C⁺·A) · R⁺ ...", show: "U_formula2" });
+  frames.push({ phase: "Шаг 3: U = C⁺·A·R⁺", status: "Связующая матрица U = C⁺·A·R⁺ найдена!", show: "U_result" });
+
+  const totalFrames = frames.length + 1;
+
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "display:flex;flex-direction:column;gap:0.6rem;font-size:0.78rem";
+
+  const phaseDiv = document.createElement("div");
+  phaseDiv.style.cssText = "font-size:0.8rem;color:var(--accent);font-weight:600;margin-bottom:0.3rem";
+  wrap.appendChild(phaseDiv);
+
+  const contentDiv = document.createElement("div");
+  contentDiv.style.cssText = "display:flex;flex-wrap:wrap;gap:0.5rem;justify-content:center;min-height:60px";
+  wrap.appendChild(contentDiv);
+
+  const statusDiv = document.createElement("div");
+  statusDiv.style.cssText = "font-size:0.75rem;color:var(--muted);text-align:center;min-height:1.2em";
+  wrap.appendChild(statusDiv);
+
+  body.appendChild(wrap);
 
   function matStr(M) {
     return M.map(r => r.map(v => v.toFixed(3)).join(" ")).join(" | ");
@@ -1556,7 +1835,7 @@ function livePseudoinverse(body, data) {
 
   function showMatrixTbl(parent, mat, label, highlight) {
     const block = document.createElement("div");
-    block.style.cssText = "text-align:center;opacity:0;transition:opacity 0.5s";
+    block.style.cssText = "text-align:center";
     const lbl = document.createElement("div");
     lbl.style.cssText = "font-weight:600;font-size:0.75rem;margin-bottom:0.15rem;color:var(--accent)";
     lbl.textContent = label;
@@ -1576,211 +1855,73 @@ function livePseudoinverse(body, data) {
     }
     block.appendChild(tbl);
     parent.appendChild(block);
-    requestAnimationFrame(() => block.style.opacity = "1");
   }
 
   function showFormula(parent, text) {
     const el = document.createElement("div");
-    el.style.cssText = "text-align:center;font-size:0.72rem;font-family:monospace;opacity:0;transition:opacity 0.5s;margin:0.2rem 0";
+    el.style.cssText = "text-align:center;font-size:0.72rem;font-family:monospace;margin:0.2rem 0;color:var(--text)";
     el.textContent = text;
     parent.appendChild(el);
-    requestAnimationFrame(() => el.style.opacity = "1");
   }
 
-  const wrap = document.createElement("div");
-  wrap.style.cssText = "display:flex;flex-direction:column;gap:0.6rem;font-size:0.78rem";
-
-  const phaseDiv = document.createElement("div");
-  phaseDiv.style.cssText = "font-size:0.8rem;color:var(--accent);font-weight:600;margin-bottom:0.3rem";
-  wrap.appendChild(phaseDiv);
-
-  const contentDiv = document.createElement("div");
-  contentDiv.style.cssText = "display:flex;flex-wrap:wrap;gap:0.5rem;justify-content:center;min-height:60px";
-  wrap.appendChild(contentDiv);
-
-  const statusDiv = document.createElement("div");
-  statusDiv.style.cssText = "font-size:0.75rem;color:var(--text-dim);text-align:center;min-height:1.2em";
-  wrap.appendChild(statusDiv);
-
-  let paused = false;
-  let resumeFn = null;
-  let abort = false;
-
-  const pauseBtn = document.createElement("button");
-  pauseBtn.textContent = "⏸ Пауза";
-  pauseBtn.style.cssText = "padding:0.25rem 0.6rem;font-size:0.72rem;cursor:pointer;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text)";
-  pauseBtn.addEventListener("click", () => {
-    if (!paused) {
-      paused = true;
-      pauseBtn.textContent = "▶ Продолжить";
-    } else {
-      paused = false;
-      pauseBtn.textContent = "⏸ Пауза";
-      const fn = resumeFn; resumeFn = null;
-      if (fn) fn();
-    }
-  });
-
-  function restartPinv() {
-    abort = true;
-    paused = false;
-    resumeFn = null;
-    body.removeChild(wrap);
-    livePseudoinverse(body, data);
-  }
-
-  const btnRow = document.createElement("div");
-  btnRow.style.cssText = "display:flex;gap:0.4rem;justify-content:center;margin-top:0.3rem";
-  btnRow.appendChild(pauseBtn);
-  addRepeatBtn(btnRow, restartPinv);
-  wrap.appendChild(btnRow);
-
-  body.appendChild(wrap);
-
-  function schedule(fn, delay) {
-    if (abort) return;
-    const id = setTimeout(() => {
-      if (abort) return;
-      if (paused) {
-        resumeFn = fn;
-        return;
-      }
-      fn();
-    }, delay);
-    return id;
-  }
-
-  function renderCPinvPhase() {
+  function renderFrame(n) {
     contentDiv.innerHTML = "";
-    phaseDiv.textContent = `Шаг 1: C⁺ = (CᵀC)⁻¹·Cᵀ (псевдообратная к C)`;
-    statusDiv.textContent = "Вычисляем псевдообразную C⁺...";
-
-    const Ct = transpose(C);
-    const CtC = dot(Ct, C);
-    const scalarCase = r === 1;
-
-    schedule(() => {
-      showMatrixTbl(contentDiv, C, "C");
-      statusDiv.textContent = "Матрица C (выбранные столбцы)";
-    }, 100);
-
-    schedule(() => {
-      statusDiv.textContent = "Вычисляем CᵀC ...";
-      showFormula(contentDiv, `CᵀC = ${matStr(CtC)}`);
-    }, 800);
-
-    schedule(() => {
-      if (scalarCase) {
-        const val = CtC[0][0];
-        const inv = 1 / val;
-        showFormula(contentDiv, `(CᵀC)⁻¹ = 1 / ${val.toFixed(3)} = ${inv.toFixed(3)}`);
-        statusDiv.textContent = `CᵀC = ${val.toFixed(3)} → (CᵀC)⁻¹ = ${inv.toFixed(3)}`;
-      } else {
-        showFormula(contentDiv, "(CᵀC)⁻¹ — обратная матрица");
-        statusDiv.textContent = "(CᵀC)⁻¹ вычислена";
-      }
-      schedule(() => renderCRegistration(), 1200);
-    }, 1600);
-
-    function renderCRegistration() {
-      showMatrixTbl(contentDiv, Cp, "C⁺ = (CᵀC)⁻¹·Cᵀ", [0, 0]);
-      statusDiv.textContent = "C⁺ найдена!";
-      schedule(() => renderRPinvPhase(), 800);
+    if (n === 0) {
+      phaseDiv.textContent = "";
+      statusDiv.textContent = "";
+      return;
     }
-  }
+    const f = frames[n - 1];
+    phaseDiv.textContent = f.phase;
+    statusDiv.textContent = f.status;
 
-  function renderRPinvPhase() {
-    contentDiv.innerHTML = "";
-    phaseDiv.textContent = `Шаг 2: R⁺ = Rᵀ·(R·Rᵀ)⁻¹ (псевдообратная к R)`;
-    statusDiv.textContent = "Вычисляем псевдообразную R⁺...";
-
-    const Rt = transpose(R);
-    const RRt = dot(R, Rt);
-    const scalarCase = r === 1;
-
-    schedule(() => {
-      showMatrixTbl(contentDiv, R, "R");
-      statusDiv.textContent = "Матрица R (выбранные строки)";
-    }, 100);
-
-    schedule(() => {
-      statusDiv.textContent = "Вычисляем R·Rᵀ ...";
-      showFormula(contentDiv, `R·Rᵀ = ${matStr(RRt)}`);
-    }, 800);
-
-    schedule(() => {
-      if (scalarCase) {
-        const val = RRt[0][0];
-        const inv = 1 / val;
-        showFormula(contentDiv, `(R·Rᵀ)⁻¹ = 1 / ${val.toFixed(3)} = ${inv.toFixed(3)}`);
-        statusDiv.textContent = `R·Rᵀ = ${val.toFixed(3)} → (R·Rᵀ)⁻¹ = ${inv.toFixed(3)}`;
-      } else {
-        showFormula(contentDiv, "(R·Rᵀ)⁻¹ — обратная матрица");
-        statusDiv.textContent = "(R·Rᵀ)⁻¹ вычислена";
-      }
-      schedule(() => renderRRegistration(), 1200);
-    }, 1600);
-
-    function renderRRegistration() {
-      showMatrixTbl(contentDiv, Rp, "R⁺ = Rᵀ·(R·Rᵀ)⁻¹", [0, 0]);
-      statusDiv.textContent = "R⁺ найдена!";
-      schedule(() => renderUPhase(), 800);
-    }
-  }
-
-  function renderUPhase() {
-    contentDiv.innerHTML = "";
-    phaseDiv.textContent = `Шаг 3: U = C⁺·A·R⁺ (связующая матрица)`;
-    statusDiv.textContent = "Перемножаем C⁺ · A · R⁺ ...";
-
-    schedule(() => {
-      showFormula(contentDiv, "U = C⁺ · A · R⁺");
-      statusDiv.textContent = "Промежуточный результат: C⁺ · A";
-    }, 300);
-
-    schedule(() => {
-      showFormula(contentDiv, "Финальное умножение: (C⁺·A) · R⁺");
-      statusDiv.textContent = "Вычисляем (C⁺·A) · R⁺ ...";
-    }, 1200);
-
-    schedule(() => {
-      const result = document.createElement("div");
-      result.style.cssText = "text-align:center;opacity:0;transition:opacity 0.5s;margin-top:0.4rem";
-      const rlbl = document.createElement("div");
-      rlbl.style.cssText = "font-weight:600;font-size:0.78rem;margin-bottom:0.2rem;color:var(--good)";
-      rlbl.textContent = "U = C⁺·A·R⁺ = ";
-      result.appendChild(rlbl);
-
-      const tbl = document.createElement("table");
-      tbl.style.cssText = "border-collapse:collapse;margin:0 auto;font-size:0.68rem;font-family:monospace";
-      for (let i = 0; i < U.length; i++) {
-        const tr = document.createElement("tr");
-        for (let j = 0; j < U[0].length; j++) {
-          const td = document.createElement("td");
-          td.style.cssText = "padding:1px 5px;border:1px solid var(--border);text-align:right;background:rgba(74,222,128,0.08)";
-          td.textContent = U[i][j].toFixed(3);
-          tr.appendChild(td);
+    switch (f.show) {
+      case "C": showMatrixTbl(contentDiv, C, "C"); break;
+      case "CtC": showMatrixTbl(contentDiv, CtC, "CᵀC"); showFormula(contentDiv, `CᵀC = ${matStr(CtC)}`); break;
+      case "CtC_inv_scalar": showFormula(contentDiv, `(CᵀC)⁻¹ = 1 / ${CtC[0][0].toFixed(3)} = ${(1/CtC[0][0]).toFixed(3)}`); break;
+      case "CtC_inv": showFormula(contentDiv, "(CᵀC)⁻¹ — обратная матрица"); break;
+      case "Cp": showMatrixTbl(contentDiv, Cp, "C⁺ = (CᵀC)⁻¹·Cᵀ"); break;
+      case "R": showMatrixTbl(contentDiv, R, "R"); break;
+      case "RRt": showMatrixTbl(contentDiv, RRt, "R·Rᵀ"); showFormula(contentDiv, `R·Rᵀ = ${matStr(RRt)}`); break;
+      case "RRt_inv_scalar": showFormula(contentDiv, `(R·Rᵀ)⁻¹ = 1 / ${RRt[0][0].toFixed(3)} = ${(1/RRt[0][0]).toFixed(3)}`); break;
+      case "RRt_inv": showFormula(contentDiv, "(R·Rᵀ)⁻¹ — обратная матрица"); break;
+      case "Rp": showMatrixTbl(contentDiv, Rp, "R⁺ = Rᵀ·(R·Rᵀ)⁻¹"); break;
+      case "U_formula1": showFormula(contentDiv, "U = C⁺ · A · R⁺"); break;
+      case "U_formula2": showFormula(contentDiv, "Финальное умножение: (C⁺·A) · R⁺"); break;
+      case "U_result": {
+        const result = document.createElement("div");
+        result.style.cssText = "text-align:center;margin-top:0.4rem";
+        const rlbl = document.createElement("div");
+        rlbl.style.cssText = "font-weight:600;font-size:0.78rem;margin-bottom:0.2rem;color:var(--good)";
+        rlbl.textContent = "U = C⁺·A·R⁺ = ";
+        result.appendChild(rlbl);
+        const tbl = document.createElement("table");
+        tbl.style.cssText = "border-collapse:collapse;margin:0 auto;font-size:0.68rem;font-family:monospace";
+        for (let i = 0; i < U.length; i++) {
+          const tr = document.createElement("tr");
+          for (let j = 0; j < U[0].length; j++) {
+            const td = document.createElement("td");
+            td.style.cssText = "padding:1px 5px;border:1px solid var(--border);text-align:right;background:rgba(74,222,128,0.08)";
+            td.textContent = U[i][j].toFixed(3);
+            tr.appendChild(td);
+          }
+          tbl.appendChild(tr);
         }
-        tbl.appendChild(tr);
+        result.appendChild(tbl);
+        contentDiv.appendChild(result);
+        break;
       }
-      result.appendChild(tbl);
-      contentDiv.appendChild(result);
-      requestAnimationFrame(() => result.style.opacity = "1");
-      statusDiv.textContent = "Связующая матрица U = C⁺·A·R⁺ найдена!";
-    }, 2000);
+      default: break;
+    }
   }
 
-  renderCPinvPhase();
+  createFrameSlider(body, totalFrames, renderFrame, { speed: 600 });
 }
 
 function liveErrorDetail(body, data) {
   const { A, Ahat, scale } = data;
   const m = A.length, n = A[0].length;
   const sA = scale || minMax(A);
-
-  let paused = false, resumeFn = null, abort = false;
-  let ci = 0, cj = 0;
-  let frobSum = 0;
 
   const wrap = document.createElement("div");
   wrap.style.cssText = "display:flex;flex-direction:column;gap:0.5rem;font-size:0.78rem";
@@ -1801,196 +1942,201 @@ function liveErrorDetail(body, data) {
   info.style.cssText = "font-size:0.75rem;color:var(--muted);text-align:center;min-height:1.2rem";
   wrap.appendChild(info);
 
-  function renderMiniMat(container, mat, label, colorKey) {
-    const block = document.createElement("div");
-    block.style.cssText = "text-align:center";
-    const lbl = document.createElement("div");
-    lbl.style.cssText = "font-weight:600;font-size:0.72rem;margin-bottom:0.1rem;color:" + colorKey;
-    lbl.textContent = label;
-    block.appendChild(lbl);
-    const host = document.createElement("div");
-    renderMatrixBlock(host, "", mat, { scale: sA });
-    block.appendChild(host);
-    container.innerHTML = "";
-    container.appendChild(block);
-  }
+  body.appendChild(wrap);
 
-  function schedule(fn, delay) {
-    if (abort) return;
-    setTimeout(() => {
-      if (abort) return;
-      if (paused) { resumeFn = fn; return; }
-      fn();
-    }, delay);
-  }
+  // Phase 1: A − Ã = E
+  const phase1Cells = m * n;
+  const phase2Cells = m * n;
+  const totalFrames = phase1Cells + phase2Cells + 2;
 
-  // Phase 1: show A and Ahat side by side, then compute error cell-by-cell
-  function phase1() {
-    phaseDiv.textContent = "Шаг 1: Матрица ошибки E = A − Ã";
-    info.textContent = "Вычисляем поэлементно...";
-
-    const wrapA = document.createElement("div");
-    wrapA.style.cssText = "text-align:center";
-    const lblA = document.createElement("div");
-    lblA.style.cssText = "font-weight:600;font-size:0.72rem;margin-bottom:0.1rem;color:var(--accent)";
-    lblA.textContent = "A";
-    wrapA.appendChild(lblA);
-    const hostA = document.createElement("div");
-    renderMatrixBlock(hostA, "", A, { scale: sA });
-    wrapA.appendChild(hostA);
-    matricesRow.appendChild(wrapA);
-
-    const opSign = document.createElement("div");
-    opSign.style.cssText = "font-size:1.2rem;font-weight:700;color:var(--text);padding:0 0.2rem";
-    opSign.textContent = "−";
-    matricesRow.appendChild(opSign);
-
-    const wrapAhat = document.createElement("div");
-    wrapAhat.style.cssText = "text-align:center";
-    const lblAh = document.createElement("div");
-    lblAh.style.cssText = "font-weight:600;font-size:0.72rem;margin-bottom:0.1rem;color:var(--good)";
-    lblAh.textContent = "Ã";
-    wrapAhat.appendChild(lblAh);
-    const hostAhat = document.createElement("div");
-    renderMatrixBlock(hostAhat, "", Ahat, { scale: sA });
-    wrapAhat.appendChild(hostAhat);
-    matricesRow.appendChild(wrapAhat);
-
-    const eqSign = document.createElement("div");
-    eqSign.style.cssText = "font-size:1.2rem;font-weight:700;color:var(--text);padding:0 0.2rem";
-    eqSign.textContent = "=";
-    matricesRow.appendChild(eqSign);
-
-    const hostE = document.createElement("div");
-    const errWork = zeros(m, n);
-    renderMatrixBlock(hostE, "", errWork, { scale: sA });
-    const wrapE = document.createElement("div");
-    wrapE.style.cssText = "text-align:center";
-    const lblE = document.createElement("div");
-    lblE.style.cssText = "font-weight:600;font-size:0.72rem;margin-bottom:0.1rem;color:var(--bad)";
-    lblE.textContent = "E = A − Ã";
-    wrapE.appendChild(lblE);
-    wrapE.appendChild(hostE);
-    matricesRow.appendChild(wrapE);
-
-    const cellsA = hostA.querySelectorAll(".cell");
-    const cellsAh = hostAhat.querySelectorAll(".cell");
-    const cellsE = hostE.querySelectorAll(".cell");
-
-    function fillErrCell() {
-      if (abort) return;
-      if (ci >= m) {
-        info.textContent = "Матрица ошибки E готова!";
-        schedule(phase2, 800);
-        return;
-      }
-      const idx = ci * n + cj;
-      const val = A[ci][cj] - Ahat[ci][cj];
-      if (cellsA[idx]) cellsA[idx].style.boxShadow = "inset 0 0 0 3px var(--accent)";
-      if (cellsAh[idx]) cellsAh[idx].style.boxShadow = "inset 0 0 0 3px var(--good)";
-      if (cellsE[idx]) {
-        errWork[ci][cj] = val;
-        const t = sA.mx > sA.mn ? (val - sA.mn) / (sA.mx - sA.mn) : 0.5;
-        const c = viridis(Math.max(0, Math.min(1, t)));
-        cellsE[idx].style.background = viridisRgb(c);
-        cellsE[idx].style.color = t > 0.6 ? "#080c14" : "#fff";
-        cellsE[idx].textContent = val.toFixed(2);
-        cellsE[idx].style.boxShadow = "inset 0 0 0 3px var(--bad)";
-      }
-      trace.innerHTML = `E<sub>${ci}${cj}</sub> = ${A[ci][cj].toFixed(2)} − ${Ahat[ci][cj].toFixed(2)} = <b>${val.toFixed(2)}</b>`;
-      info.textContent = `(${ci},${cj}) разница = ${val.toFixed(2)}`;
-
-      setTimeout(() => {
-        if (cellsA[idx]) cellsA[idx].style.boxShadow = "";
-        if (cellsAh[idx]) cellsAh[idx].style.boxShadow = "";
-        if (cellsE[idx]) cellsE[idx].style.boxShadow = "";
-      }, 400);
-
-      cj++;
-      if (cj >= n) { cj = 0; ci++; }
-      schedule(fillErrCell, 350);
+  // Precompute all error values
+  const errVals = [];
+  for (let i = 0; i < m; i++) {
+    for (let j = 0; j < n; j++) {
+      errVals.push({ i, j, val: A[i][j] - Ahat[i][j] });
     }
-    fillErrCell();
   }
 
-  // Phase 2: compute squared terms for Frobenius norm
-  function phase2() {
-    ci = 0; cj = 0; frobSum = 0;
-    phaseDiv.textContent = "Шаг 2: Сумма квадратов Σᵢⱼ Eᵢⱼ² → ||E||_F";
+  // Precompute all squared values
+  const sqVals = errVals.map(e => ({ ...e, sq: e.val * e.val }));
 
-    renderMiniMat(matricesRow, zeros(m, n), "E² (поквадратно)", "var(--bad)");
+  // Build static layout (A − Ã = E)
+  const wrapA = document.createElement("div");
+  wrapA.style.cssText = "text-align:center";
+  const lblA = document.createElement("div");
+  lblA.style.cssText = "font-weight:600;font-size:0.72rem;margin-bottom:0.1rem;color:var(--accent)";
+  lblA.textContent = "A";
+  wrapA.appendChild(lblA);
+  const hostA = document.createElement("div");
+  renderMatrixBlock(hostA, "", A, { scale: sA });
+  wrapA.appendChild(hostA);
+  matricesRow.appendChild(wrapA);
 
-    const hostSq = matricesRow.querySelector("div:last-child div:last-child");
-    const cellsSq = hostSq ? hostSq.querySelectorAll(".cell") : [];
-    const cellsE = matricesRow.querySelectorAll(".cell");
+  const opSign = document.createElement("div");
+  opSign.style.cssText = "font-size:1.2rem;font-weight:700;color:var(--text);padding:0 0.2rem";
+  opSign.textContent = "−";
+  matricesRow.appendChild(opSign);
 
-    const sumRow = document.createElement("div");
-    sumRow.style.cssText = "text-align:center;font-size:0.75rem;font-family:monospace;margin-top:0.3rem;min-height:1.4rem";
-    wrap.insertBefore(sumRow, trace);
+  const wrapAhat = document.createElement("div");
+  wrapAhat.style.cssText = "text-align:center";
+  const lblAh = document.createElement("div");
+  lblAh.style.cssText = "font-weight:600;font-size:0.72rem;margin-bottom:0.1rem;color:var(--good)";
+  lblAh.textContent = "Ã";
+  wrapAhat.appendChild(lblAh);
+  const hostAhat = document.createElement("div");
+  renderMatrixBlock(hostAhat, "", Ahat, { scale: sA });
+  wrapAhat.appendChild(hostAhat);
+  matricesRow.appendChild(wrapAhat);
 
-    function fillSqCell() {
-      if (abort) return;
-      if (ci >= m) {
+  const eqSign = document.createElement("div");
+  eqSign.style.cssText = "font-size:1.2rem;font-weight:700;color:var(--text);padding:0 0.2rem";
+  eqSign.textContent = "=";
+  matricesRow.appendChild(eqSign);
+
+  const errWork = zeros(m, n);
+  const hostE = document.createElement("div");
+  renderMatrixBlock(hostE, "", errWork, { scale: sA });
+  const wrapE = document.createElement("div");
+  wrapE.style.cssText = "text-align:center";
+  const lblE = document.createElement("div");
+  lblE.style.cssText = "font-weight:600;font-size:0.72rem;margin-bottom:0.1rem;color:var(--bad)";
+  lblE.textContent = "E = A − Ã";
+  wrapE.appendChild(lblE);
+  wrapE.appendChild(hostE);
+  matricesRow.appendChild(wrapE);
+
+  const cellsA = hostA.querySelectorAll(".cell");
+  const cellsAh = hostAhat.querySelectorAll(".cell");
+  const cellsE = hostE.querySelectorAll(".cell");
+
+  // Phase 2: squared error matrix (will be cleared and recreated per frame)
+  let sumRow = null;
+  let hostSq = null;
+
+  function renderFrame(fIdx) {
+    if (fIdx === 0) {
+      phaseDiv.textContent = "";
+      info.textContent = "";
+      trace.innerHTML = "";
+      for (let ci = 0; ci < m * n; ci++) {
+        if (cellsA[ci]) cellsA[ci].style.boxShadow = "";
+        if (cellsAh[ci]) cellsAh[ci].style.boxShadow = "";
+        if (cellsE[ci]) {
+          cellsE[ci].style.background = "";
+          cellsE[ci].style.color = "";
+          cellsE[ci].textContent = "";
+          cellsE[ci].style.boxShadow = "";
+        }
+        errWork[Math.floor(ci / n)][ci % n] = 0;
+      }
+      if (sumRow) { sumRow.textContent = ""; }
+      return;
+    }
+
+    if (fIdx <= phase1Cells) {
+      // Phase 1: error cells
+      phaseDiv.textContent = "Шаг 1: Матрица ошибки E = A − Ã";
+      info.textContent = `Вычисляем поэлементно... (${fIdx}/${phase1Cells})`;
+      const count = fIdx - 1;
+      for (let ci = 0; ci <= count && ci < errVals.length; ci++) {
+        const ev = errVals[ci];
+        const idx = ev.i * n + ev.j;
+        errWork[ev.i][ev.j] = ev.val;
+        if (cellsE[idx]) {
+          const t = sA.mx > sA.mn ? (ev.val - sA.mn) / (sA.mx - sA.mn) : 0.5;
+          const c = viridis(Math.max(0, Math.min(1, t)));
+          cellsE[idx].style.background = viridisRgb(c);
+          cellsE[idx].style.color = t > 0.6 ? "#080c14" : "#fff";
+          cellsE[idx].textContent = ev.val.toFixed(2);
+          cellsE[idx].style.boxShadow = ci === count ? "inset 0 0 0 3px var(--bad)" : "";
+        }
+        if (cellsA[idx]) cellsA[idx].style.boxShadow = ci === count ? "inset 0 0 0 3px var(--accent)" : "";
+        if (cellsAh[idx]) cellsAh[idx].style.boxShadow = ci === count ? "inset 0 0 0 3px var(--good)" : "";
+      }
+      if (count >= 0 && count < errVals.length) {
+        const ev = errVals[count];
+        trace.innerHTML = `E<sub>${ev.i}${ev.j}</sub> = ${A[ev.i][ev.j].toFixed(2)} − ${Ahat[ev.i][ev.j].toFixed(2)} = <b>${ev.val.toFixed(2)}</b>`;
+      }
+      if (sumRow) sumRow.textContent = "";
+      return;
+    }
+
+    // Phase 2: squared error
+    const phase2Idx = fIdx - phase1Cells - 1;
+    if (phase2Idx === 0) {
+      // First frame of phase 2: setup
+      phaseDiv.textContent = "Шаг 2: Сумма квадратов Σᵢⱼ Eᵢⱼ² → ||E||_F";
+      info.textContent = "Вычисляем сумму квадратов...";
+      trace.innerHTML = "";
+
+      // Remove old E² matrix if exists
+      const existingSq = matricesRow.querySelector(".err-sq-wrap");
+      if (existingSq) existingSq.remove();
+
+      const sqWrap = document.createElement("div");
+      sqWrap.className = "err-sq-wrap";
+      sqWrap.style.cssText = "text-align:center";
+      const sqLbl = document.createElement("div");
+      sqLbl.style.cssText = "font-weight:600;font-size:0.72rem;margin-bottom:0.1rem;color:var(--bad)";
+      sqLbl.textContent = "E² (поквадратно)";
+      sqWrap.appendChild(sqLbl);
+      hostSq = document.createElement("div");
+      renderMatrixBlock(hostSq, "", zeros(m, n), { scale: sA });
+      sqWrap.appendChild(hostSq);
+      matricesRow.appendChild(sqWrap);
+
+      if (!sumRow) {
+        sumRow = document.createElement("div");
+        sumRow.style.cssText = "text-align:center;font-size:0.75rem;font-family:monospace;margin-top:0.3rem;min-height:1.4rem";
+        wrap.insertBefore(sumRow, trace);
+      }
+    }
+
+    if (phase2Idx > 0) {
+      let frobSum = 0;
+      const cellsSq = hostSq ? hostSq.querySelectorAll(".cell") : [];
+      const count = Math.min(phase2Idx, phase2Cells);
+
+      for (let ci = 0; ci < phase2Cells; ci++) {
+        const sv = sqVals[ci];
+        const idx = sv.i * n + sv.j;
+        if (ci < count) {
+          frobSum += sv.sq;
+          if (cellsSq && cellsSq[idx]) {
+            const t = Math.min(sv.sq / (Math.max(...sqVals.map(x => x.sq), 1)), 1);
+            const c = viridis(t);
+            cellsSq[idx].style.background = viridisRgb(c);
+            cellsSq[idx].style.color = t > 0.6 ? "#080c14" : "#fff";
+            cellsSq[idx].textContent = sv.sq.toFixed(4);
+            cellsSq[idx].style.boxShadow = ci === count - 1 ? "inset 0 0 0 3px var(--bad)" : "";
+          }
+          if (cellsE && cellsE[idx]) cellsE[idx].style.boxShadow = ci === count - 1 ? "inset 0 0 0 3px var(--good)" : "";
+        }
+      }
+
+      if (count <= phase2Cells && count > 0) {
+        const sv = sqVals[count - 1];
+        trace.innerHTML = `E<sub>${sv.i}${sv.j}</sub>² = (${sv.val.toFixed(2)})² = ${sv.sq.toFixed(4)}`;
+        info.textContent = `Сумма квадратов: ${frobSum.toFixed(4)} (${count}/${phase2Cells})`;
+        if (sumRow) sumRow.textContent = `Σ = ${frobSum.toFixed(4)}`;
+      }
+
+      if (count >= phase2Cells) {
         const frob = Math.sqrt(frobSum);
         const normA = Math.sqrt(A.reduce((s, row) => s + row.reduce((ss, v) => ss + v * v, 0), 0));
         const relErr = frob / (normA + 1e-12);
         trace.innerHTML = `ΣEᵢⱼ² = <b>${frobSum.toFixed(4)}</b> → ||E||_F = √(${frobSum.toFixed(4)}) = <b>${frob.toFixed(4)}</b>`;
         info.textContent = `Frobenius норма: ${frob.toFixed(4)}`;
-        sumRow.textContent = `Относительная ошибка: ||E||_F / ||A||_F = ${(relErr * 100).toFixed(2)}%`;
-        sumRow.style.fontWeight = "600";
-        sumRow.style.color = "var(--good)";
-        return;
+        if (sumRow) {
+          sumRow.textContent = `Относительная ошибка: ||E||_F / ||A||_F = ${(relErr * 100).toFixed(2)}%`;
+          sumRow.style.fontWeight = "600";
+          sumRow.style.color = "var(--good)";
+        }
       }
-      const idx = ci * n + cj;
-      const val = A[ci][cj] - Ahat[ci][cj];
-      const sq = val * val;
-      frobSum += sq;
-      if (cellsSq && cellsSq[idx]) {
-        const t = (sq - 0) / (Math.max(...A.flat().map(v => v * v), 1));
-        const c = viridis(Math.max(0, Math.min(1, t)));
-        cellsSq[idx].style.background = viridisRgb(c);
-        cellsSq[idx].style.color = t > 0.6 ? "#080c14" : "#fff";
-        cellsSq[idx].textContent = sq.toFixed(4);
-        cellsSq[idx].style.boxShadow = "inset 0 0 0 3px var(--bad)";
-      }
-      if (cellsE && cellsE[idx]) cellsE[idx].style.boxShadow = "inset 0 0 0 3px var(--good)";
-      trace.innerHTML = `E<sub>${ci}${cj}</sub>² = (${val.toFixed(2)})² = ${sq.toFixed(4)}`;
-      sumRow.textContent = `Σ = ${frobSum.toFixed(4)} (из ${m * n})`;
-      info.textContent = `Текущая сумма: ${frobSum.toFixed(4)}`;
-
-      setTimeout(() => {
-        if (cellsSq && cellsSq[idx]) cellsSq[idx].style.boxShadow = "";
-        if (cellsE && cellsE[idx]) cellsE[idx].style.boxShadow = "";
-      }, 400);
-
-      cj++;
-      if (cj >= n) { cj = 0; ci++; }
-      schedule(fillSqCell, 300);
     }
-    fillSqCell();
   }
 
-  const pauseBtn = document.createElement("button");
-  pauseBtn.textContent = "⏸ Пауза";
-  pauseBtn.style.cssText = "padding:0.25rem 0.6rem;font-size:0.72rem;cursor:pointer;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text)";
-  pauseBtn.addEventListener("click", () => {
-    if (!paused) { paused = true; pauseBtn.textContent = "▶ Продолжить"; }
-    else { paused = false; pauseBtn.textContent = "⏸ Пауза"; const fn = resumeFn; resumeFn = null; if (fn) fn(); }
-  });
-
-  const btnRow = document.createElement("div");
-  btnRow.style.cssText = "display:flex;gap:0.4rem;justify-content:center;margin-top:0.3rem";
-  btnRow.appendChild(pauseBtn);
-  addRepeatBtn(btnRow, () => {
-    abort = true; paused = false; resumeFn = null;
-    ci = m; // stop loops
-    body.removeChild(wrap);
-    liveErrorDetail(body, data);
-  });
-  wrap.appendChild(btnRow);
-  body.appendChild(wrap);
-
-  phase1();
+  createFrameSlider(body, totalFrames, renderFrame, { speed: 250 });
 }
 
 function showArrowDetail(arrowStep, steps, arrowIndex) {
@@ -2424,102 +2570,22 @@ export function renderVisualizerPage(container, state) {
     wrap.addEventListener("click", () => showOpDetailModal(item.op));
     legendBar.appendChild(wrap);
   }
-  layout.appendChild(legendBar);
+  // ── Sidebar (left) ──
+  const sidebar = document.createElement("div");
+  sidebar.className = "vis-sidebar";
 
-  // ── Matrix editor + Pipeline ──
-  const body = document.createElement("div");
-  body.className = "vis-body";
+  const sidebarTitle = document.createElement("div");
+  sidebarTitle.className = "vis-sidebar__title";
+  sidebarTitle.textContent = "Управление";
+  sidebar.appendChild(sidebarTitle);
 
-  // Editor card
-  const editorCard = document.createElement("div");
-  editorCard.className = "card vis-editor-card";
-  const editorHead = document.createElement("div");
-  editorHead.className = "card__head";
-  editorHead.innerHTML = `<h2>Матрица A</h2><div class="sub">клик → выбор, колёсико ±0.1 (Shift ±1)</div>`;
-  const normsMini = document.createElement("div");
-  normsMini.style.cssText = "margin-left:auto;display:flex;align-self:center";
-  renderRowColNorms(normsMini, A);
-  editorHead.appendChild(normsMini);
-  editorCard.appendChild(editorHead);
-
-  // Viridis color scale bar
-  const scaleBar = document.createElement("div");
-  scaleBar.className = "vis-scale-bar";
-  const scaleGrad = document.createElement("div");
-  scaleGrad.className = "vis-scale-gradient";
-  const scaleLabels = document.createElement("div");
-  scaleLabels.className = "vis-scale-labels";
-  scaleLabels.innerHTML = `<span>мин</span><span>макс</span>`;
-  scaleBar.appendChild(scaleGrad);
-  scaleBar.appendChild(scaleLabels);
-  editorCard.appendChild(scaleBar);
-
-  const editorHost = document.createElement("div");
-  editorHost.className = "vis-editor-host";
-  renderMatrixEditor(editorHost, A, (newA) => {
-    state.visA = newA;
-    renderVisualizerPage(container, state);
-  });
-  editorCard.appendChild(editorHost);
-
-  // Size controls
-  const sizeRow = document.createElement("div");
-  sizeRow.className = "vis-size-row";
-  const rowInput = document.createElement("input");
-  rowInput.type = "number";
-  rowInput.min = 2;
-  rowInput.max = 10;
-  rowInput.value = A.length;
-  rowInput.style.width = "60px";
-  const colInput = document.createElement("input");
-  colInput.type = "number";
-  colInput.min = 2;
-  colInput.max = 10;
-  colInput.value = A[0].length;
-  colInput.style.width = "60px";
-  const sizeLabel = document.createElement("span");
-  sizeLabel.className = "vis-size-label";
-  sizeLabel.textContent = "Размер: ";
-  const applySize = document.createElement("button");
-  applySize.textContent = "Применить";
-  applySize.addEventListener("click", () => {
-    const newM = Math.max(2, Math.min(10, Number(rowInput.value) || 2));
-    const newN = Math.max(2, Math.min(10, Number(colInput.value) || 2));
-    const newA = zeros(newM, newN);
-    for (let i = 0; i < Math.min(newM, A.length); i++)
-      for (let j = 0; j < Math.min(newN, A[0].length); j++)
-        newA[i][j] = A[i][j];
-    state.visA = newA;
-    renderVisualizerPage(container, state);
-  });
-  sizeRow.appendChild(sizeLabel);
-  sizeRow.appendChild(document.createTextNode(" m: "));
-  sizeRow.appendChild(rowInput);
-  sizeRow.appendChild(document.createTextNode(" n: "));
-  sizeRow.appendChild(colInput);
-  sizeRow.appendChild(applySize);
-  editorCard.appendChild(sizeRow);
-
-  body.appendChild(editorCard);
-
-  // Pipeline
-  const pipelineWrap = document.createElement("div");
-  pipelineWrap.className = "vis-pipeline-wrap";
-
-  const pipeHead = document.createElement("div");
-  pipeHead.className = "card__head";
-  pipeHead.innerHTML = `<h2>Визуальный процесс: ${algo.toUpperCase()}</h2><div class="sub">пошаговое разложение с анимацией</div>`;
-  pipelineWrap.appendChild(pipeHead);
-
-  // Pipeline inline bar: methods | presets | settings
-  const pipeBar = document.createElement("div");
-  pipeBar.className = "vis-pipeline-bar";
-
-  // Section 1: Methods
-  const pipeSection1 = document.createElement("div");
-  pipeSection1.className = "vis-pipe-section";
+  // Algo group
+  const algoLabel = document.createElement("div");
+  algoLabel.className = "vis-sidebar__label";
+  algoLabel.textContent = "Метод";
+  sidebar.appendChild(algoLabel);
   const algoGroup = document.createElement("div");
-  algoGroup.className = "vis-algo-group";
+  algoGroup.className = "vis-sidebar__group";
   const algos = [
     { id: "svd", label: "SVD" },
     { id: "pca", label: "PCA" },
@@ -2537,19 +2603,19 @@ export function renderVisualizerPage(container, state) {
     });
     algoGroup.appendChild(btn);
   }
-  pipeSection1.appendChild(algoGroup);
-  pipeBar.appendChild(pipeSection1);
+  sidebar.appendChild(algoGroup);
 
-  // Section 2: Presets
-  const pipeSection2 = document.createElement("div");
-  pipeSection2.className = "vis-pipe-section";
+  // Presets
+  const presetLabel = document.createElement("div");
+  presetLabel.className = "vis-sidebar__label";
+  presetLabel.textContent = "Шаблон";
+  sidebar.appendChild(presetLabel);
   const presetGroup = document.createElement("div");
-  presetGroup.className = "vis-preset-group";
+  presetGroup.className = "vis-sidebar__group";
   const presets = [
     { id: "identity", label: "Единичная" },
     { id: "zeros", label: "Нулевая" },
     { id: "random", label: "Случайная" },
-    { id: "example", label: "Пример" },
   ];
   for (const p of presets) {
     const btn = document.createElement("button");
@@ -2562,83 +2628,109 @@ export function renderVisualizerPage(container, state) {
     });
     presetGroup.appendChild(btn);
   }
-  pipeSection2.appendChild(presetGroup);
-  pipeBar.appendChild(pipeSection2);
+  sidebar.appendChild(presetGroup);
 
-  // Section 3: Settings (rank, iters, seed)
-  const pipeSection3 = document.createElement("div");
-  pipeSection3.className = "vis-pipe-section vis-pipe-settings";
-
-  const rankGroup = document.createElement("div");
-  rankGroup.className = "vis-inline-group";
-  const rankLabel = document.createElement("span");
-  rankLabel.textContent = "Ранг k:";
+  // Rank
+  const rankLabel = document.createElement("div");
+  rankLabel.className = "vis-sidebar__label";
+  rankLabel.textContent = "Ранг k";
+  sidebar.appendChild(rankLabel);
   const rankInput = document.createElement("input");
   rankInput.type = "number";
   rankInput.min = 1;
   rankInput.max = Math.min(A.length, A[0].length, 10);
   rankInput.value = k;
-  rankInput.className = "vis-rank-input";
+  rankInput.className = "vis-sidebar__input";
   rankInput.addEventListener("change", () => {
     state.visK = Math.max(1, Math.min(Number(rankInput.value) || 1, Math.min(A.length, A[0].length, 10)));
     renderVisualizerPage(container, state);
   });
-  rankGroup.appendChild(rankLabel);
-  rankGroup.appendChild(rankInput);
-  pipeSection3.appendChild(rankGroup);
+  sidebar.appendChild(rankInput);
 
-  const iterGroup = document.createElement("div");
-  iterGroup.className = "vis-inline-group";
-  const iterLabel = document.createElement("span");
-  iterLabel.textContent = "Итерации:";
-  const iterInput = document.createElement("input");
-  iterInput.type = "number";
-  iterInput.min = 1;
-  iterInput.max = 50;
-  iterInput.value = iters;
-  iterInput.className = "vis-rank-input";
-  iterInput.style.width = "60px";
-  iterInput.addEventListener("change", () => {
-    state.visIters = Math.max(1, Math.min(50, Number(iterInput.value) || 20));
-    renderVisualizerPage(container, state);
-  });
-  iterGroup.appendChild(iterLabel);
-  iterGroup.appendChild(iterInput);
-  if (algo !== "nmf" && algo !== "als") iterGroup.style.display = "none";
-  pipeSection3.appendChild(iterGroup);
-
-  const seedGroup = document.createElement("div");
-  seedGroup.className = "vis-inline-group";
-  const seedLabel = document.createElement("span");
-  seedLabel.textContent = "Seed:";
+  // Seed
+  const seedLabel = document.createElement("div");
+  seedLabel.className = "vis-sidebar__label";
+  seedLabel.textContent = "Seed";
+  sidebar.appendChild(seedLabel);
   const seedInput = document.createElement("input");
   seedInput.type = "number";
   seedInput.min = 0;
   seedInput.max = 999999;
   seedInput.value = visSeed;
-  seedInput.className = "vis-rank-input";
-  seedInput.style.width = "75px";
+  seedInput.className = "vis-sidebar__input";
   seedInput.addEventListener("change", () => {
     state.visSeed = Math.max(0, Math.floor(Number(seedInput.value) || 0));
     renderVisualizerPage(container, state);
   });
-  seedGroup.appendChild(seedLabel);
-  seedGroup.appendChild(seedInput);
-  pipeSection3.appendChild(seedGroup);
+  sidebar.appendChild(seedInput);
 
-  pipeBar.appendChild(pipeSection3);
+  // Iterations (only for NMF/ALS)
+  const iterBlock = document.createElement("div");
+  iterBlock.className = "vis-sidebar__iter-block";
+  if (algo !== "nmf" && algo !== "als") iterBlock.style.display = "none";
+  const iterLabel = document.createElement("div");
+  iterLabel.className = "vis-sidebar__label";
+  iterLabel.textContent = algo === "als" ? "Итерации ALS" : "Итерации";
+  iterBlock.appendChild(iterLabel);
+  const iterInput = document.createElement("input");
+  iterInput.type = "number";
+  iterInput.min = 1;
+  iterInput.max = 50;
+  iterInput.value = iters;
+  iterInput.className = "vis-sidebar__input";
+  iterInput.addEventListener("change", () => {
+    state.visIters = Math.max(1, Math.min(50, Number(iterInput.value) || 20));
+    renderVisualizerPage(container, state);
+  });
+  iterBlock.appendChild(iterInput);
+  sidebar.appendChild(iterBlock);
 
-  pipelineWrap.appendChild(pipeBar);
+  layout.appendChild(sidebar);
+
+  // ── Main body (right) ──
+  const body = document.createElement("div");
+  body.className = "vis-body";
+
+  body.appendChild(legendBar);
+
+  const pipelineWrap = document.createElement("div");
+  pipelineWrap.className = "vis-pipeline-wrap";
+
+  const pipeHead = document.createElement("div");
+  pipeHead.className = "card__head";
+  pipeHead.innerHTML = `<h2>Визуальный процесс: ${algo.toUpperCase()}</h2><div class="sub">пошаговое разложение с анимацией</div>`;
+  pipelineWrap.appendChild(pipeHead);
 
   const pipeContainer = document.createElement("div");
   pipeContainer.className = "vis-pipeline";
 
   const steps = generatePipeline(algo, A, k, iters);
-  for (let i = 0; i < steps.length; i++) {
-    if (steps[i].type === "arrow") {
+
+  // Make first step editable (embedded matrix editor)
+  if (steps.length > 0 && steps[0].type === "matrix") {
+    steps[0].editable = true;
+    steps[0].A = A;
+    steps[0].onChange = (newA) => {
+      state.visA = newA;
+      renderVisualizerPage(container, state);
+    };
+  }
+
+  let i = 0;
+  while (i < steps.length) {
+    if (steps[i].type === "arrow" && i + 1 < steps.length && steps[i + 1].type !== "arrow") {
+      const group = document.createElement("div");
+      group.className = "vis-step-group";
+      renderArrow(group, steps, i);
+      renderStep(group, steps[i + 1], i + 1);
+      pipeContainer.appendChild(group);
+      i += 2;
+    } else if (steps[i].type === "arrow") {
       renderArrow(pipeContainer, steps, i);
+      i++;
     } else {
       renderStep(pipeContainer, steps[i], i);
+      i++;
     }
   }
 

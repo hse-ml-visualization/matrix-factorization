@@ -71,9 +71,8 @@ export function svdTruncated(A, k) {
   let Sk = S.slice(0, r);
   let Vk = takeVk(V, r);
   if (needTranspose) {
-    const tmp = Uk;
-    Uk = Vk;
-    Vk = tmp;
+    const tmp = Uk; Uk = Vk; Vk = tmp;
+    const tmp2 = U; U = V; V = tmp2;
   }
   const US = dot(Uk, diag(Sk));
   const Ahat = dot(US, transpose(Vk));
@@ -132,12 +131,6 @@ export function nmfReconstructHistory(A, k, totalIters = 80, captureHistory = tr
       captureIters.add(i);
     }
     captureIters.add(totalIters);
-    if (!captureIters.has(0)) {
-      const arr = [...captureIters];
-      arr.unshift(0);
-      captureIters.clear();
-      arr.forEach((v) => captureIters.add(v));
-    }
   }
 
   const capture = (iter, WH) => {
@@ -147,7 +140,7 @@ export function nmfReconstructHistory(A, k, totalIters = 80, captureHistory = tr
       for (let i = 0; i < m; i++) for (let j = 0; j < n; j++) Ahat[i][j] = WH[i][j] - shift;
       const err = diffMat(A, Ahat);
       const frob = frobNormMat(err);
-      history.push({ i: iter, frob, Ahat });
+      history.push({ i: iter, frob, Ahat, W: clone(W), H: clone(H) });
     }
   };
 
@@ -245,9 +238,6 @@ export function alsReconstructHistory(A, k, totalIters = 80, reg = 1e-2, capture
   for (let i = 0; i < m; i++) for (let t = 0; t < r; t++) X[i][t] = rnd();
   for (let j = 0; j < n; j++) for (let t = 0; t < r; t++) Y[j][t] = rnd();
 
-  const I = zeros(r, r);
-  for (let i = 0; i < r; i++) I[i][i] = 1;
-
   const maxCapture = 50;
   const stride = Math.max(1, Math.floor(totalIters / maxCapture));
 
@@ -257,12 +247,6 @@ export function alsReconstructHistory(A, k, totalIters = 80, reg = 1e-2, capture
   if (captureHistory) {
     for (let i = 0; i <= totalIters; i += stride) captureIters.add(i);
     captureIters.add(totalIters);
-    if (!captureIters.has(0)) {
-      const arr = [...captureIters];
-      arr.unshift(0);
-      captureIters.clear();
-      arr.forEach((v) => captureIters.add(v));
-    }
   }
 
   const capture = (iter, Xcur, Ycur) => {
