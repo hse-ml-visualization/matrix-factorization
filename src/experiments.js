@@ -44,7 +44,7 @@ export function renderCenterEdgeExperiment(container, state) {
   clear(container);
 
   const desc = el("p", { className: "muted", style: "margin-bottom:0.7rem; max-width:72ch" });
-  desc.innerHTML = `Статистика по ${tex("N")} случайным матрицам одного размера с ${tex("A")} — сравнение ошибки в центре и на краях гипотеза: центр аппроксимируется хуже потому что там концентрируется больше информации`;
+  desc.innerHTML = `Статистика по ${tex("N")} случайным матрицам одного размера с ${tex("A")} — сравнение ошибки в центре и на краях`;
   container.appendChild(desc);
 
   const controls = el("div", { className: "controls grid2" }, [
